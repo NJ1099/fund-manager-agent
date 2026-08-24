@@ -25,10 +25,13 @@ async function load(){
     if (el) el.style.display = 'none';
   }
 }
-// '내 보유' 섹션은 서버 API(/api/holdings 등)로 살아 움직인다. 스냅샷에는 서버가
-// 없으므로 이 플래그로 초기화 자체를 막는다 — 감추기만 하면 요청은 그대로 나가서
-// 콘솔에 404 가 쌓인다. 무엇보다 공개 스냅샷에 개인 보유 정보가 실릴 이유가 없다.
-window.__SNAPSHOT__ = true;
+// '내 보유' 섹션의 동작 모드. 두 가지로 빌드된다.
+//   기본(snapshot) : 서버가 전혀 없는 단일 HTML. 보유 섹션은 아무 요청도 보내지 않는다.
+//   remote         : Vercel 처럼 검색·시세 중계 함수(/api/search, /api/market)만 있는 곳.
+//                    보유 목록은 방문자 브라우저의 localStorage 에 저장되고,
+//                    진단은 브라우저에서 계산한다. Kronos 견해는 나오지 않는다.
+window.__MODE_FLAG__
+window.__BASE_CCY__ = "__BASE_CCY__";
 """
 
 # 대시보드에서 찾아 바꿀 앵커들. dashboard.html 을 고치다 이 문자열이 어긋나면
@@ -49,9 +52,20 @@ def _replace_once(html, old, new, what):
     return html.replace(old, new, 1)
 
 
-def build(out_path):
+def build(out_path, remote=False, base_currency=None):
+    """스냅샷 HTML 을 만든다.
+
+    remote=True 면 '내 보유' 섹션이 살아 있는 배포본을 만든다 — 방문자가 자기 종목을
+    넣어볼 수 있고, 데이터는 그 사람 브라우저에만 남는다. 봇 쪽 화면(성과·논평·주목
+    종목)은 어느 쪽이든 정적이다.
+    """
     state = json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
     html = (config.WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
+    stub = STUB.replace(
+        "window.__MODE_FLAG__",
+        "window.__REMOTE__ = true;" if remote else "window.__SNAPSHOT__ = true;",
+    ).replace('"__BASE_CCY__"',
+              '"' + (base_currency or config.HOLDINGS_BASE_CURRENCY) + '"')
 
     # 상태를 문서에 삽입
     html = _replace_once(
@@ -61,7 +75,7 @@ def build(out_path):
         "상태 삽입 지점",
     )
     # 폴링/실행 버튼을 스냅샷 동작으로 교체
-    html = _replace_once(html, POLL_ANCHOR, STUB + "\nload();", "폴링 시작 지점")
+    html = _replace_once(html, POLL_ANCHOR, stub + "\nload();", "폴링 시작 지점")
     # 배지에 스냅샷 표시
     html = _replace_once(
         html, SUB_ANCHOR,
@@ -75,4 +89,6 @@ def build(out_path):
 
 
 if __name__ == "__main__":
-    build(sys.argv[1] if len(sys.argv) > 1 else "agent_snapshot.html")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    build(args[0] if args else "agent_snapshot.html",
+          remote="--remote" in sys.argv)

@@ -75,9 +75,33 @@ def test_보유_섹션은_스냅샷에서_요청을_보내지_않는다(tmp_path
     """
     html = build(tmp_path)
     assert "window.__SNAPSHOT__ = true" in html
+    assert "window.__REMOTE__ = true" not in html
 
     dashboard = (config.WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
-    assert "if(window.__SNAPSHOT__)" in dashboard, "대시보드가 플래그를 확인하지 않는다"
+    assert "window.__SNAPSHOT__ ? 'snapshot'" in dashboard, "대시보드가 모드를 판정하지 않는다"
+
+
+def test_remote_빌드는_보유_섹션을_살려둔다(tmp_path, demo_state):
+    """Vercel 배포본은 방문자가 자기 종목을 넣어볼 수 있어야 한다.
+
+    검색·시세는 서버리스 중계 함수를 쓰고, 목록은 그 사람 브라우저에만 저장된다.
+    """
+    out = tmp_path / "remote.html"
+    build_snapshot.build(out, remote=True)
+    html = out.read_text(encoding="utf-8")
+
+    assert "window.__REMOTE__ = true" in html
+    assert "window.__SNAPSHOT__ = true" not in html
+
+
+def test_기준통화가_빌드에_박힌다(tmp_path, demo_state):
+    out = tmp_path / "remote.html"
+    build_snapshot.build(out, remote=True, base_currency="USD")
+    html = out.read_text(encoding="utf-8")
+
+    assert 'window.__BASE_CCY__ = "USD"' in html
+    # 치환이 변수명까지 먹어치우지 않아야 한다 (과거에 한 번 그랬다)
+    assert "window.USD" not in html
 
 
 # ---------------------------------------------------------- 앵커 어긋남 방어

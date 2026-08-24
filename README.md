@@ -2,10 +2,11 @@
 
 [![데모](https://img.shields.io/badge/%EB%8D%B0%EB%AA%A8-%EB%8C%80%EC%8B%9C%EB%B3%B4%EB%93%9C-2ea043)](https://fund-manager-agent.vercel.app) [![라이선스](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![모의투자 전용](https://img.shields.io/badge/trading-paper%20only-d8a13a)](#-모의투자-전용)
 
-> **라이브 데모**: <https://fund-manager-agent.vercel.app> — 실제 시장 데이터로 파이프라인을
-> 돌린 결과를 담은 정적 스냅샷입니다. 전 구간 모의투자이며 브로커에 전송된 주문은 없습니다.
-> 봇 자체는 서버리스에 올릴 수 없으므로(모델 추론·의존성 크기), 돌려보려면 아래 설치 절차대로
-> 로컬에서 실행하세요.
+> **라이브 데모**: <https://fund-manager-agent.vercel.app>
+> 봇 화면은 실제 시장 데이터로 돌린 정적 스냅샷이고, 맨 위 **내 보유 종목**은 살아 있습니다 —
+> 직접 종목을 검색해 넣으면 비중·손익·집중도·상관·변동성이 바로 계산됩니다.
+> 넣은 종목은 **여러분 브라우저에만** 저장되고 서버로 가지 않습니다.
+> 모델 견해(Kronos)는 추론이 필요해 로컬 실행에서만 나옵니다.
 
 
 원문(Antonije Mirkovic, *The Open-Source Hedge Fund Stack*)의 네 자리를 실제 오픈소스 레포로 채운

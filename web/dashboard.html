@@ -548,15 +548,36 @@ load();
 polling=setInterval(load,15000);
 
 /* ================= 내 보유 종목 =================
-   봇 상태 폴링과 독립적으로 동작한다. 이 화면의 어떤 동작도 주문을 만들지 않는다. */
+   세 가지 모드로 동작한다.
+
+   1) server   — `python server.py` 로 띄운 로컬 대시보드.
+                 증권사 연동·CSV 임포트·Kronos 견해까지 전부 된다.
+   2) remote   — Vercel 등 정적 호스팅. 검색·시세만 서버리스 함수(/api/search,
+                 /api/market)로 중계하고, 보유 목록은 **브라우저 localStorage** 에
+                 저장한다. 공개 페이지이므로 남에게 보이지 않고 다른 기기에도
+                 넘어가지 않는다. Kronos 견해는 모델 추론이 필요해 여기선 안 나온다.
+   3) snapshot — 서버가 아예 없는 단일 HTML. 아무 요청도 보내지 않는다.
+
+   ■ 계산이 두 곳에 있다 (알면서 감수한 것)
+   remote 모드에서는 파이썬을 부를 수 없어 진단(집중도·상관·변동성·손익)을 브라우저에서
+   다시 계산한다. `core/holdings_analysis.py` 와 **같은 공식**을 써야 하며, 한쪽을
+   고치면 다른 쪽도 고쳐야 한다. 공식이 갈라지면 로컬과 Vercel 이 다른 숫자를 보여준다.
+   대응 관계는 각 함수 주석에 적어뒀다.
+
+   어떤 모드에서도 이 화면은 주문을 만들지 않는다. */
+const MODE = window.__SNAPSHOT__ ? 'snapshot' : (window.__REMOTE__ ? 'remote' : 'server');
+const LS_KEY = 'fma.holdings.v1';
+const BASE_CCY = window.__BASE_CCY__ || 'KRW';
+
 let HOLD=null, SUG=[], PICK=null, symTimer=null;
 
 const fmtNum=(v,d=0)=>v==null?'—':Number(v).toLocaleString('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d});
-const money=(v,cur)=>v==null?'—':(cur==='KRW'?'₩'+fmtNum(v):'$'+fmtNum(v,2));
+const money=(v,cur)=>v==null?'—':(cur==='KRW'?'₩'+fmtNum(v):(cur==='USD'?'$'+fmtNum(v,2):fmtNum(v,2)+' '+cur));
 const signPct=v=>v==null?'—':(v>=0?'+':'')+v.toFixed(2)+'%';
 
 function holdMsg(text,kind){
   const el=document.getElementById('holdMsg');
+  if(!el) return;
   el.innerHTML=text?`<div class="hmsg ${kind||'ok'}">${text}</div>`:'';
   if(text&&kind!=='err') setTimeout(()=>{if(el.firstChild)el.innerHTML='';},6000);
 }
@@ -568,36 +589,323 @@ async function api(url,opts){
   return j;
 }
 
-/* ---- 검색 ---- */
-document.getElementById('symQ').addEventListener('input',function(){
+/* ---------------- 저장소: 로컬 서버 vs 브라우저 ---------------- */
+const ServerStore={
+  async list(){ return api('/api/holdings'); },
+  async search(q){ return (await api('/api/symbol-search?q='+encodeURIComponent(q))).results||[]; },
+  async add(body){ return api('/api/holdings',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); },
+  async remove(ticker){ return api('/api/holdings/delete',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker})}); },
+  async analyze(){ return api('/api/holdings/analyze',{method:'POST'}); },
+};
+
+const RemoteStore={
+  _read(){
+    try{ const raw=localStorage.getItem(LS_KEY); return raw?JSON.parse(raw):[]; }
+    catch(e){ return []; }
+  },
+  _write(items){
+    try{ localStorage.setItem(LS_KEY,JSON.stringify(items)); }
+    catch(e){ holdMsg('브라우저에 저장하지 못했습니다 (저장 공간 제한일 수 있습니다)','err'); }
+  },
+  async list(){
+    return {holdings:this._read(), analysis:window.__lastAnalysis||null,
+            base_currency:BASE_CCY, analysis_running:false, brokers:[]};
+  },
+  async search(q){ return (await api('/api/search?q='+encodeURIComponent(q))).results||[]; },
+  async add(body){
+    const items=this._read();
+    const tk=String(body.ticker).trim().toUpperCase();
+    const idx=items.findIndex(h=>h.ticker===tk);
+    const qty=Number(body.quantity);
+    if(!(qty>0)) throw new Error('수량은 0보다 커야 합니다');
+
+    if(body.mode==='lot'&&idx>=0&&items[idx].avg_cost!=null&&body.avg_cost!=null){
+      // 추가매수: 수량은 더하고 평단은 가중평균 (holdings.py::add_lot 과 같은 규칙)
+      const old=items[idx], total=old.quantity+qty;
+      old.avg_cost=(old.avg_cost*old.quantity+Number(body.avg_cost)*qty)/total;
+      old.quantity=total;
+    }else{
+      const row={ticker:tk, name:body.name||null, quantity:qty,
+        avg_cost:body.avg_cost==null?null:Number(body.avg_cost),
+        currency:(body.currency||'USD').toUpperCase(), source:'manual',
+        updated_at:new Date().toISOString()};
+      if(idx>=0) items[idx]=row; else items.push(row);
+    }
+    this._write(items);
+    return {message:tk+' 을(를) 저장했습니다'};
+  },
+  async remove(ticker){
+    const tk=String(ticker).toUpperCase();
+    this._write(this._read().filter(h=>h.ticker!==tk));
+    window.__lastAnalysis=null;
+    return {message:tk+' 을(를) 삭제했습니다'};
+  },
+  async analyze(){
+    const items=this._read();
+    if(!items.length) throw new Error('보유 종목이 없습니다. 먼저 종목을 추가하세요');
+
+    // 환율 심볼까지 한 번에 받는다 (USDKRW=X 형태)
+    const currencies=[...new Set(items.map(h=>h.currency))].filter(c=>c&&c!==BASE_CCY);
+    const fxSyms=currencies.map(c=>`${c}${BASE_CCY}=X`);
+    const symbols=[...new Set(items.map(h=>h.ticker).concat(fxSyms))];
+
+    const m=await api('/api/market?history=1&range=1y&symbols='+
+      encodeURIComponent(symbols.join(',')));
+    const fx={[BASE_CCY]:1};
+    currencies.forEach(c=>{ const v=m.prices[`${c}${BASE_CCY}=X`]; if(v) fx[c]=v; });
+
+    const result=analyzeClient(items,m,fx);
+    window.__lastAnalysis=result;
+    return {message:'분석을 마쳤습니다'};
+  },
+};
+
+const Store = MODE==='remote' ? RemoteStore : ServerStore;
+
+/* ---------------- 브라우저 계산 (remote 모드 전용) ----------------
+   각 함수는 core/holdings_analysis.py 의 같은 이름 함수와 같은 공식을 쓴다. */
+
+function pearson(a,b){
+  const n=Math.min(a.length,b.length);
+  if(n<30) return null;
+  let ma=0,mb=0;
+  for(let i=0;i<n;i++){ ma+=a[i]; mb+=b[i]; }
+  ma/=n; mb/=n;
+  let num=0,da=0,db=0;
+  for(let i=0;i<n;i++){ const x=a[i]-ma,y=b[i]-mb; num+=x*y; da+=x*x; db+=y*y; }
+  if(da<=0||db<=0) return null;
+  return num/Math.sqrt(da*db);
+}
+
+function toReturns(closes){
+  const out=[];
+  for(let i=1;i<closes.length;i++){
+    if(closes[i-1]>0) out.push(closes[i]/closes[i-1]-1);
+  }
+  return out;
+}
+
+function stdev(xs){
+  if(xs.length<2) return null;
+  const m=xs.reduce((a,b)=>a+b,0)/xs.length;
+  const v=xs.reduce((a,b)=>a+(b-m)*(b-m),0)/(xs.length-1);
+  return Math.sqrt(v);
+}
+
+/* holdings.py::HoldingsBook.valuation 과 같은 규칙:
+   시세를 못 받은 종목, 환율이 없는 통화는 합산에서 빼고 목록으로 보고한다.
+   0 으로 채우면 자산이 조용히 줄어든다. */
+function valuationClient(items,prices,fx){
+  const rows=[]; let total=0; const unpriced=[], unconverted=[];
+  items.forEach(h=>{
+    const px=prices[h.ticker], rate=fx[h.currency];
+    const mv=px!=null?px*h.quantity:null;
+    const cb=h.avg_cost!=null?h.avg_cost*h.quantity:null;
+    const pnl=(mv!=null&&cb!=null)?mv-cb:null;
+    const row={...h, price:px==null?null:px, market_value:mv, cost_basis:cb, pnl,
+      pnl_pct:(pnl!=null&&cb)?pnl/cb*100:null, fx_rate:rate==null?null:rate,
+      market_value_base:(mv!=null&&rate!=null)?mv*rate:null};
+    if(px==null) unpriced.push(h.ticker);
+    else if(rate==null) unconverted.push(h.ticker);
+    else total+=row.market_value_base;
+    rows.push(row);
+  });
+  rows.forEach(r=>{ r.weight=(r.market_value_base!=null&&total>0)?r.market_value_base/total:null; });
+  return {base_currency:BASE_CCY, total_value:Math.round(total*100)/100, rows,
+          unpriced, unconverted, as_of:new Date().toISOString()};
+}
+
+function analyzeClient(items,market,fx){
+  const val=valuationClient(items,market.prices||{},fx);
+  const hist=market.history||{};
+  const weights={};
+  val.rows.forEach(r=>{ if(r.weight) weights[r.ticker]=r.weight; });
+
+  // --- 집중도 (concentration) ---
+  let concentration=null;
+  const ws=Object.values(weights).filter(Boolean).sort((a,b)=>b-a);
+  if(ws.length){
+    const hhi=ws.reduce((a,w)=>a+w*w,0);
+    const top=ws[0], top3=ws.slice(0,3).reduce((a,b)=>a+b,0);
+    const flags=[];
+    if(top>=0.35) flags.push(`단일 종목 비중 ${(top*100).toFixed(1)}%`);
+    if(top3>=0.75&&ws.length>3) flags.push(`상위 3종목 ${(top3*100).toFixed(1)}%`);
+    if(hhi>=0.25) flags.push(`허핀달 지수 ${hhi.toFixed(2)}`);
+    concentration={n_positions:ws.length, top_weight_pct:+(top*100).toFixed(2),
+      top3_weight_pct:+(top3*100).toFixed(2), hhi:+hhi.toFixed(4),
+      effective_positions:hhi>0?+(1/hhi).toFixed(2):null, flags};
+  }
+
+  // --- 상관 · 변동성 ---
+  const rets={}; let windowDays=0;
+  Object.keys(hist).forEach(tk=>{
+    if(!weights[tk]) return;
+    const r=toReturns(hist[tk].closes||[]);
+    if(r.length>=30){ rets[tk]=r; windowDays=Math.max(windowDays,r.length); }
+  });
+  const cols=Object.keys(rets);
+
+  let correlation=null;
+  if(cols.length>=2){
+    const pairs=[];
+    for(let i=0;i<cols.length;i++) for(let j=i+1;j<cols.length;j++){
+      const n=Math.min(rets[cols[i]].length,rets[cols[j]].length);
+      const c=pearson(rets[cols[i]].slice(-n),rets[cols[j]].slice(-n));
+      if(c!=null) pairs.push({a:cols[i],b:cols[j],corr:+c.toFixed(3)});
+    }
+    if(pairs.length){
+      pairs.sort((x,y)=>y.corr-x.corr);
+      const avg=pairs.reduce((a,p)=>a+p.corr,0)/pairs.length;
+      const flags=[];
+      if(avg>=0.70) flags.push(`평균 상관 ${avg.toFixed(2)} — 종목 수만큼 분산되지 않습니다`);
+      correlation={n_pairs:pairs.length, avg_correlation:+avg.toFixed(3),
+        highest:pairs.slice(0,3), lowest:pairs.slice(-3), window_days:windowDays, flags};
+    }
+  }
+
+  let volatility=null;
+  if(cols.length>=1){
+    const n=Math.min(...cols.map(t=>rets[t].length));
+    const wsum=cols.reduce((a,t)=>a+weights[t],0);
+    if(n>=30&&wsum>0){
+      const w=cols.map(t=>weights[t]/wsum);
+      const series=cols.map(t=>rets[t].slice(-n));
+      // 공분산 행렬 (연율화) → w'Σw
+      let varSum=0;
+      for(let i=0;i<cols.length;i++) for(let j=0;j<cols.length;j++){
+        const mi=series[i].reduce((a,b)=>a+b,0)/n, mj=series[j].reduce((a,b)=>a+b,0)/n;
+        let cov=0;
+        for(let k=0;k<n;k++) cov+=(series[i][k]-mi)*(series[j][k]-mj);
+        cov=cov/(n-1)*252;
+        varSum+=w[i]*w[j]*cov;
+      }
+      if(varSum>0){
+        const byTicker={};
+        cols.forEach((t,i)=>{ byTicker[t]=+((stdev(series[i])*Math.sqrt(252))*100).toFixed(2); });
+        const wavg=cols.reduce((a,t,i)=>a+w[i]*byTicker[t],0);
+        const pv=Math.sqrt(varSum)*100;
+        volatility={portfolio_vol_annual_pct:+pv.toFixed(2),
+          weighted_avg_vol_pct:+wavg.toFixed(2),
+          diversification_benefit_pct:+(wavg-pv).toFixed(2),
+          by_ticker:byTicker, window_days:n};
+      }
+    }
+  }
+
+  // --- 통화 노출 ---
+  let currency_exposure=null;
+  const byCur={};
+  val.rows.forEach(r=>{ if(r.market_value_base!=null)
+    byCur[r.currency]=(byCur[r.currency]||0)+r.market_value_base; });
+  const curTotal=Object.values(byCur).reduce((a,b)=>a+b,0);
+  if(curTotal>0){
+    currency_exposure={};
+    Object.entries(byCur).sort((a,b)=>b[1]-a[1])
+      .forEach(([c,v])=>{ currency_exposure[c]=+(v/curTotal*100).toFixed(2); });
+  }
+
+  // --- 손익 (평단이 있는 종목만) ---
+  let pnl=null;
+  const priced=val.rows.filter(r=>r.pnl!=null&&r.fx_rate!=null);
+  if(priced.length){
+    const cost=priced.reduce((a,r)=>a+r.cost_basis*r.fx_rate,0);
+    const total=priced.reduce((a,r)=>a+r.pnl*r.fx_rate,0);
+    const best=priced.reduce((a,b)=>a.pnl_pct>b.pnl_pct?a:b);
+    const worst=priced.reduce((a,b)=>a.pnl_pct<b.pnl_pct?a:b);
+    pnl={covered:priced.length, uncovered:val.rows.length-priced.length,
+      total_cost_base:+cost.toFixed(2), total_pnl_base:+total.toFixed(2),
+      total_pnl_pct:cost?+(total/cost*100).toFixed(2):null,
+      winners:priced.filter(r=>r.pnl>0).length, losers:priced.filter(r=>r.pnl<0).length,
+      best:{ticker:best.ticker,pnl_pct:+best.pnl_pct.toFixed(2)},
+      worst:{ticker:worst.ticker,pnl_pct:+worst.pnl_pct.toFixed(2)}};
+  }
+
+  const diagnostics={concentration,correlation,volatility,currency_exposure,pnl};
+  return {empty:false, as_of:val.as_of, valuation:val, views:[], skipped_views:{},
+    diagnostics, notes:buildNotesClient(val,diagnostics,market),
+    disclaimer:'이 분석은 투자 조언이 아닙니다. 어떤 매매도 자동으로 일어나지 않습니다.'};
+}
+
+/* holdings_analysis.py::build_notes 와 같은 문구 규칙 */
+function buildNotesClient(val,d,market){
+  const notes=[];
+  if(d.concentration){
+    const c=d.concentration;
+    if(c.flags.length) notes.push(`집중도가 높습니다: ${c.flags.join(' · ')}. `+
+      `${c.n_positions}종목을 갖고 있지만 유효 종목 수는 ${c.effective_positions}개 수준입니다.`);
+    else if(c.n_positions>=3) notes.push(`${c.n_positions}종목에 비교적 고르게 분산돼 있습니다 `+
+      `(최대 비중 ${c.top_weight_pct}%).`);
+  }
+  if(d.correlation){
+    const c=d.correlation;
+    if(c.flags.length){ const t=c.highest[0];
+      notes.push(`보유 종목이 같이 움직입니다 (평균 상관 ${c.avg_correlation}). `+
+        `가장 높은 쌍은 ${t.a}–${t.b} ${t.corr} 입니다. 종목 수를 늘려도 위험이 줄지 않는 구간입니다.`);
+    }else if(c.avg_correlation<=0.3){
+      notes.push(`종목 간 상관이 낮아(평균 ${c.avg_correlation}) 분산이 실제로 작동하고 있습니다.`);
+    }
+  }
+  if(d.volatility){
+    const v=d.volatility;
+    notes.push(`포트폴리오 연변동성은 ${v.portfolio_vol_annual_pct}% 입니다 `+
+      `(종목별 가중평균 ${v.weighted_avg_vol_pct}% 대비 ${v.diversification_benefit_pct}%p 낮음 = 분산 효과).`);
+  }
+  if(d.currency_exposure&&Object.keys(d.currency_exposure).length>1){
+    const foreign=Object.entries(d.currency_exposure)
+      .filter(([c])=>c!==val.base_currency).reduce((a,[,v])=>a+v,0);
+    if(foreign>=30) notes.push(`해외통화 노출이 ${foreign.toFixed(0)}% 입니다 `+
+      `(${Object.entries(d.currency_exposure).map(([c,v])=>c+' '+v+'%').join(' · ')}). `+
+      `${val.base_currency} 기준 평가액은 환율에도 함께 움직입니다.`);
+  }
+  if(d.pnl){
+    const p=d.pnl;
+    if(p.total_pnl_pct!=null) notes.push(`평단이 입력된 ${p.covered}종목 기준 손익은 `+
+      `${signPct(p.total_pnl_pct)} 입니다 (수익 ${p.winners} · 손실 ${p.losers}, `+
+      `최고 ${p.best.ticker} ${signPct(p.best.pnl_pct)} / 최악 ${p.worst.ticker} ${signPct(p.worst.pnl_pct)}).`);
+    if(p.uncovered) notes.push(`${p.uncovered}종목은 평단이 없어 손익 계산에서 빠졌습니다.`);
+  }
+  if(val.unpriced.length) notes.push(`시세를 받지 못해 평가에서 빠진 종목: ${val.unpriced.join(', ')}.`);
+  if(val.unconverted.length) notes.push(`환율을 받지 못해 합산에서 빠진 종목: ${val.unconverted.join(', ')}.`);
+  if(MODE==='remote') notes.push('모델 견해(Kronos)는 이 페이지에서 계산할 수 없습니다 — '+
+    '추론이 필요해 로컬에서 `python server.py` 로 띄웠을 때만 나옵니다. '+
+    '위 진단은 전부 실제 시세로 계산한 값입니다.');
+  return notes;
+}
+
+/* ---------------- 검색 ---------------- */
+const symQ=document.getElementById('symQ');
+if(symQ) symQ.addEventListener('input',function(){
   const q=this.value.trim();
   clearTimeout(symTimer);
-  if(q.length<1){document.getElementById('symSug').style.display='none';return;}
+  const box=document.getElementById('symSug');
+  if(q.length<1){ box.style.display='none'; return; }
   symTimer=setTimeout(async()=>{
     try{
-      const j=await api('/api/symbol-search?q='+encodeURIComponent(q));
-      SUG=j.results||[];
-      const box=document.getElementById('symSug');
-      if(!SUG.length){box.innerHTML='<div><span class="ex">결과가 없습니다</span></div>';}
-      else{box.innerHTML=SUG.map((r,i)=>
+      SUG=await Store.search(q);
+      if(!SUG.length){ box.innerHTML='<div><span class="ex">결과가 없습니다</span></div>'; }
+      else{ box.innerHTML=SUG.map((r,i)=>
         `<div data-i="${i}"><span><span class="sym">${r.symbol}</span> ${r.name}</span>`+
-        `<span class="ex">${r.exchange||''} · ${r.currency}</span></div>`).join('');}
+        `<span class="ex">${r.exchange||''} · ${r.currency}</span></div>`).join(''); }
       box.style.display='block';
     }catch(e){ holdMsg('검색 실패: '+e.message,'err'); }
   },250);
 });
 
-document.getElementById('symSug').addEventListener('click',e=>{
+const sugBox=document.getElementById('symSug');
+if(sugBox) sugBox.addEventListener('click',e=>{
   const row=e.target.closest('div[data-i]'); if(!row) return;
   PICK=SUG[+row.dataset.i];
-  document.getElementById('symSug').style.display='none';
+  sugBox.style.display='none';
   document.getElementById('symQ').value='';
   document.getElementById('addTicker').textContent=PICK.symbol+' · '+PICK.name;
   document.getElementById('addForm').style.display='flex';
   document.getElementById('addQty').focus();
 });
 
-document.getElementById('addCancel').onclick=()=>{
+const addCancel=document.getElementById('addCancel');
+if(addCancel) addCancel.onclick=()=>{
   document.getElementById('addForm').style.display='none'; PICK=null;
 };
 
@@ -607,34 +915,42 @@ async function submitAdd(mode){
   const avg=document.getElementById('addAvg').value;
   if(!(qty>0)){ holdMsg('수량을 입력하세요','err'); return; }
   try{
-    const j=await api('/api/holdings',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ticker:PICK.symbol,name:PICK.name,currency:PICK.currency,
-        quantity:qty,avg_cost:avg===''?null:parseFloat(avg),mode:mode})});
+    const j=await Store.add({ticker:PICK.symbol,name:PICK.name,currency:PICK.currency,
+      quantity:qty,avg_cost:avg===''?null:parseFloat(avg),mode:mode});
     document.getElementById('addForm').style.display='none';
     document.getElementById('addQty').value=''; document.getElementById('addAvg').value='';
-    PICK=null; holdMsg(j.message); loadHoldings();
+    PICK=null; holdMsg(j.message);
+    await loadHoldings();
+    if(MODE==='remote') startAnalysis();      // 추가하면 바로 계산해서 보여준다
   }catch(e){ holdMsg(e.message,'err'); }
 }
-document.getElementById('addBtn').onclick=()=>submitAdd('set');
-document.getElementById('addLotBtn').onclick=()=>submitAdd('lot');
+const addBtn=document.getElementById('addBtn');
+if(addBtn) addBtn.onclick=()=>submitAdd('set');
+const addLotBtn=document.getElementById('addLotBtn');
+if(addLotBtn) addLotBtn.onclick=()=>submitAdd('lot');
 
-/* ---- 목록 · 렌더 ---- */
+/* ---------------- 목록 · 렌더 ---------------- */
 async function loadHoldings(){
-  try{ HOLD=await api('/api/holdings'); renderHoldings(); }
-  catch(e){ document.getElementById('holdBody').innerHTML=
-    `<div class="empty">보유 정보를 불러오지 못했습니다: ${e.message}</div>`; }
+  try{ HOLD=await Store.list(); renderHoldings(); }
+  catch(e){ const b=document.getElementById('holdBody');
+    if(b) b.innerHTML=`<div class="empty">보유 정보를 불러오지 못했습니다: ${e.message}</div>`; }
 }
 
 function renderActions(brokers){
   const el=document.getElementById('holdActions');
-  const btns=(brokers||[]).map(b=>{
-    const ok=b.configured;
-    return `<button data-broker="${b.name}" ${ok?'':'disabled'} title="${
-      ok?'조회 전용 — 주문은 하지 않습니다':'설정 필요: '+(b.missing||[]).join(', ')}">${b.label} 가져오기</button>`;
-  }).join('');
-  el.innerHTML=btns+
-    '<button id="csvBtn" title="증권사에서 내려받은 잔고 CSV">CSV 가져오기</button>'+
-    '<button id="analyzeBtn">분석 실행</button>';
+  if(!el) return;
+  let html='';
+  if(MODE==='server'){
+    html+=(brokers||[]).map(b=>{
+      const ok=b.configured;
+      return `<button data-broker="${b.name}" ${ok?'':'disabled'} title="${
+        ok?'조회 전용 — 주문은 하지 않습니다':'설정 필요: '+(b.missing||[]).join(', ')}">${b.label} 가져오기</button>`;
+    }).join('');
+    html+='<button id="csvBtn" title="증권사에서 내려받은 잔고 CSV">CSV 가져오기</button>';
+  }
+  html+='<button id="analyzeBtn">'+(MODE==='remote'?'새로고침':'분석 실행')+'</button>';
+  el.innerHTML=html;
+
   el.querySelectorAll('button[data-broker]').forEach(b=>{
     b.onclick=async function(){
       const label=this.textContent; this.disabled=true; this.textContent='가져오는 중…';
@@ -644,7 +960,8 @@ function renderActions(brokers){
       finally{ this.disabled=false; this.textContent=label; }
     };
   });
-  document.getElementById('csvBtn').onclick=()=>document.getElementById('csvFile').click();
+  const csvBtn=document.getElementById('csvBtn');
+  if(csvBtn) csvBtn.onclick=()=>document.getElementById('csvFile').click();
   document.getElementById('analyzeBtn').onclick=startAnalysis;
 }
 
@@ -653,8 +970,10 @@ function renderHoldings(){
   renderActions(HOLD.brokers);
   const rows=HOLD.holdings||[];
   const body=document.getElementById('holdBody');
+  if(!body) return;
   if(!rows.length){
-    body.innerHTML='<div class="empty">보유 종목이 없습니다. 위에서 검색해 추가하거나 증권사에서 가져오세요.</div>';
+    body.innerHTML='<div class="empty">보유 종목이 없습니다. 위 검색창에 종목 이름을 넣어 추가하세요 '+
+      '<span style="color:var(--dim)">(예: 삼성전자, 애플, TIGER 미국나스닥100, SPY)</span></div>';
     return;
   }
 
@@ -662,25 +981,26 @@ function renderHoldings(){
   const val=a.valuation||{};
   const vrows={}; (val.rows||[]).forEach(r=>vrows[r.ticker]=r);
   const views={}; (a.views||[]).forEach(v=>views[v.ticker]=v);
+  const showViews=MODE!=='remote';
 
   let html='<table class="htable"><thead><tr>'+
     '<th>종목</th><th>수량</th><th>평단</th><th>현재가</th><th>평가액</th>'+
-    '<th>비중</th><th>손익</th><th>모델 견해</th><th></th></tr></thead><tbody>';
+    '<th>비중</th><th>손익</th>'+(showViews?'<th>모델 견해</th>':'')+'<th></th></tr></thead><tbody>';
   rows.forEach(h=>{
     const v=vrows[h.ticker]||{}, mv=views[h.ticker];
     const pnlCls=v.pnl_pct==null?'':(v.pnl_pct>=0?'style="color:var(--pos,#3fb0a0)"':'style="color:var(--neg,#e06c6c)"');
     const viewCell=mv?`<span ${mv.view_horizon_pct>=0?'style="color:var(--pos,#3fb0a0)"':'style="color:var(--neg,#e06c6c)"'}>`+
-      `${signPct(mv.view_horizon_pct)}</span> <span class="ex" style="color:var(--dim);font-size:10px">확신 ${mv.confidence}</span>`:'—';
+      `${signPct(mv.view_horizon_pct)}</span> <span style="color:var(--dim);font-size:10px">확신 ${mv.confidence}</span>`:'—';
     html+=`<tr><td><span class="tk">${h.ticker}</span>`+
       (h.name?`<div class="nm">${h.name}</div>`:'')+
-      `<span class="hsrc">${h.source}</span></td>`+
+      `</td>`+
       `<td>${fmtNum(h.quantity,h.quantity%1?4:0)}</td>`+
       `<td>${money(h.avg_cost,h.currency)}</td>`+
       `<td>${money(v.price,h.currency)}</td>`+
       `<td>${money(v.market_value,h.currency)}</td>`+
       `<td>${v.weight==null?'—':(v.weight*100).toFixed(1)+'%'}</td>`+
       `<td ${pnlCls}>${signPct(v.pnl_pct)}</td>`+
-      `<td>${viewCell}</td>`+
+      (showViews?`<td>${viewCell}</td>`:'')+
       `<td><span class="del" data-del="${h.ticker}" title="삭제">✕</span></td></tr>`;
   });
   html+='</tbody></table>';
@@ -712,17 +1032,20 @@ function renderHoldings(){
     if(a.disclaimer) html+=`<div class="note" style="margin-top:10px">${a.disclaimer}</div>`;
     if(a.as_of) html+=`<div class="note">분석 시각 ${a.as_of.replace('T',' ').slice(0,16)}</div>`;
   }else{
-    html+='<div class="note" style="margin-top:10px">「분석 실행」을 누르면 보유 종목의 모델 견해와 '+
-      '집중도·상관·손익 진단이 나옵니다 (종목당 1초 남짓).</div>';
+    html+='<div class="note" style="margin-top:10px">'+
+      (MODE==='remote'
+        ? '「새로고침」을 누르면 최신 시세로 비중·손익·집중도·상관·변동성을 다시 계산합니다.'
+        : '「분석 실행」을 누르면 보유 종목의 모델 견해와 집중도·상관·손익 진단이 나옵니다 (종목당 1초 남짓).')+
+      '</div>';
   }
   body.innerHTML=html;
 
   body.querySelectorAll('[data-del]').forEach(el=>{
     el.onclick=async function(){
-      try{ const j=await api('/api/holdings/delete',{method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ticker:this.dataset.del})});
-        holdMsg(j.message); loadHoldings();
+      try{ const j=await Store.remove(this.dataset.del);
+        holdMsg(j.message);
+        await loadHoldings();
+        if(MODE==='remote'&&(HOLD.holdings||[]).length) startAnalysis();
       }catch(e){ holdMsg(e.message,'err'); }
     };
   });
@@ -733,8 +1056,9 @@ function metricBox(label,value,sub){
     `<div class="note">${label}</div><div class="note" style="font-size:10px">${sub}</div></div>`;
 }
 
-/* ---- CSV ---- */
-document.getElementById('csvFile').addEventListener('change',async function(){
+/* ---------------- CSV (로컬 서버 모드에서만) ---------------- */
+const csvFile=document.getElementById('csvFile');
+if(csvFile) csvFile.addEventListener('change',async function(){
   const f=this.files&&this.files[0]; if(!f) return;
   holdMsg('CSV 를 읽는 중…');
   try{
@@ -746,35 +1070,46 @@ document.getElementById('csvFile').addEventListener('change',async function(){
   finally{ this.value=''; }
 });
 
-/* ---- 분석 ---- */
+/* ---------------- 분석 ---------------- */
 async function startAnalysis(){
   const btn=document.getElementById('analyzeBtn');
-  btn.disabled=true; btn.textContent='분석 중…';
+  const label=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent=MODE==='remote'?'계산 중…':'분석 중…'; }
   try{
-    const j=await api('/api/holdings/analyze',{method:'POST'});
+    const j=await Store.analyze();
+    if(MODE==='remote'){
+      holdMsg(j.message); await loadHoldings();
+      if(btn){ btn.disabled=false; btn.textContent=label; }
+      return;
+    }
     holdMsg(j.message);
     const t=setInterval(async()=>{
       try{
-        const s=await api('/api/holdings');
+        const s=await Store.list();
         if(!s.analysis_running){ clearInterval(t); HOLD=s; renderHoldings();
-          btn.disabled=false; btn.textContent='분석 실행'; }
-      }catch(e){ clearInterval(t); btn.disabled=false; btn.textContent='분석 실행'; }
+          if(btn){ btn.disabled=false; btn.textContent=label; } }
+      }catch(e){ clearInterval(t); if(btn){ btn.disabled=false; btn.textContent=label; } }
     },3000);
-  }catch(e){ holdMsg(e.message,'err'); btn.disabled=false; btn.textContent='분석 실행'; }
+  }catch(e){
+    holdMsg(e.message,'err');
+    if(btn){ btn.disabled=false; btn.textContent=label; }
+  }
 }
 
-/* 증권사 목록은 한 번만 받아 둔다.
-   스냅샷(서버 없이 여는 단일 HTML)에서는 아무 요청도 보내지 않는다. */
+/* ---------------- 시작 ---------------- */
 (async()=>{
-  if(window.__SNAPSHOT__){
+  if(MODE==='snapshot'){
     const h=document.getElementById('holdings');
     if(h) h.style.display='none';
     return;
   }
-  try{ const b=await api('/api/brokers'); if(HOLD) HOLD.brokers=b.brokers;
-       window.__brokers=b.brokers; }catch(e){}
+  if(MODE==='server'){
+    try{ const b=await api('/api/brokers'); window.__brokers=b.brokers; }catch(e){}
+  }
   await loadHoldings();
   if(window.__brokers&&HOLD){ HOLD.brokers=window.__brokers; renderHoldings(); }
+  // 저장된 종목이 있으면 최신 시세로 한 번 계산해서 보여준다
+  if(MODE==='remote'&&HOLD&&(HOLD.holdings||[]).length&&!HOLD.analysis) startAnalysis();
 })();
 
 </script>

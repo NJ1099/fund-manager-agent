@@ -126,9 +126,11 @@ def build(out_path):
     cycle = agent.run_cycle()
     print(f"  사이클 #{cycle['cycle_no']} 완료 · 자산 ${cycle['equity']:,.0f}")
 
-    # 스냅샷 HTML 생성
+    # 스냅샷 HTML 생성.
+    # remote=True — 배포본에서 방문자가 '내 보유'에 자기 종목을 넣을 수 있게 한다.
+    # 그 데이터는 방문자 브라우저에만 저장되고 서버로도, 이 저장소로도 오지 않는다.
     import build_snapshot                          # noqa: E402
-    build_snapshot.build(out_path)
+    build_snapshot.build(out_path, remote=True)
 
     # 데모임을 화면에서 분명히 밝힌다 — 남의 실계좌로 오해하면 안 된다
     html = Path(out_path).read_text(encoding="utf-8")

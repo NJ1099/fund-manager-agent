@@ -1,0 +1,6 @@
+{
+  "name": "fund-manager-agent-web",
+  "private": true,
+  "type": "module",
+  "description": "정적 대시보드 + 종목검색·시세 중계 함수. 봇 본체는 파이썬이며 로컬에서 돌린다."
+}
