@@ -1,0 +1,23 @@
+# 연구 데스크
+torch>=2.0.0
+einops==0.8.1
+huggingface_hub>=0.33.1
+safetensors>=0.6.2
+tqdm>=4.67.1
+
+# 포트폴리오 데스크
+skfolio>=0.20.1
+
+# 집행 데스크
+nautilus_trader>=1.231.0
+
+# 데이터
+yfinance>=1.6.0
+pandas>=2.2.0
+numpy>=1.26
+
+# 설정
+python-dotenv>=1.0.0
+
+# 테스트 (pytest -q · 모델이나 네트워크 없이 돌아감)
+pytest>=8.0.0

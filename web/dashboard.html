@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>펀드매니저 에이전트 — 실시간</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230f141c'/%3E%3Cpath d='M3 11.5L6 7l3 2.5L13 4' stroke='%234fbf7a' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080b10; --panel:#0f141c; --panel2:#141b26; --line:#1e2733; --line2:#161e28;
+  --text:#e8edf4; --muted:#8b96a5; --dim:#59636f;
+  --research:#3fb0a0; --portfolio:#d4a24c; --exec:#6d8fd4; --pm:#a479c9;
+  --pos:#4fbf7a; --neg:#e0706c;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --disp:'Space Grotesk',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 18px 70px}
+
+/* topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  padding-bottom:16px;border-bottom:1px solid var(--line)}
+.brand h1{font-family:var(--disp);font-size:20px;font-weight:600;margin:0 0 5px;letter-spacing:-.01em}
+.brand .sub{font-size:11px;color:var(--dim)}
+.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:3px;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;border:1px solid}
+.pill.paper{background:rgba(224,112,108,.1);color:var(--neg);border-color:rgba(224,112,108,.3)}
+.pill.live-dot::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pill.src{background:rgba(164,121,201,.1);color:var(--pm);border-color:rgba(164,121,201,.3)}
+.pill.fresh{background:rgba(79,191,122,.08);color:var(--pos);border-color:rgba(79,191,122,.25)}
+button{font-family:var(--mono);font-size:11.5px;padding:7px 14px;border-radius:4px;cursor:pointer;
+  background:var(--panel2);color:var(--text);border:1px solid var(--line);transition:.15s}
+button:hover:not(:disabled){background:#1c2534;border-color:#2b3746}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible{outline:2px solid var(--exec);outline-offset:2px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:20px 0 26px}
+.stat{background:var(--panel);padding:13px 14px}
+.stat .k{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.stat .v{font-family:var(--disp);font-size:19px;font-weight:600}
+.v.pos{color:var(--pos)}.v.neg{color:var(--neg)}
+@media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* sections */
+section{margin-bottom:28px}
+.head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.title{font-family:var(--disp);font-size:16px;font-weight:600}
+.note{font-size:11px;color:var(--dim)}
+.panel{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:16px}
+
+/* PM opinion — signature block */
+.opinion{border-left:3px solid var(--pm);background:linear-gradient(90deg,rgba(164,121,201,.06),transparent 60%)}
+.opinion .who{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--pm);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.opinion p{margin:0;font-size:13.5px;line-height:1.85;color:var(--text)}
+.opinion .foot{margin-top:12px;padding-top:10px;border-top:1px solid var(--line2);
+  font-size:10.5px;color:var(--dim);line-height:1.6}
+
+/* conviction board */
+.board{display:grid;gap:8px}
+.row{display:grid;grid-template-columns:26px 62px 1fr 78px 96px 84px;gap:12px;align-items:center;
+  background:var(--panel);border:1px solid var(--line2);border-radius:5px;padding:11px 13px;transition:.15s}
+.row:hover{border-color:#26313f;background:var(--panel2)}
+.row.held{border-left:3px solid var(--exec)}
+.row.watch{border-left:3px solid var(--line)}
+.rank{font-family:var(--disp);font-size:15px;font-weight:600;color:var(--dim)}
+.row.held .rank{color:var(--exec)}
+.tk{font-family:var(--disp);font-size:15px;font-weight:600}
+.tk small{display:block;font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400;margin-top:2px}
+.note-cell{font-size:11px;color:var(--muted);line-height:1.5}
+.view{text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
+.dir{display:inline-block;font-size:8.5px;font-weight:600;letter-spacing:.06em;
+  padding:1px 5px;border-radius:2px;margin-top:3px}
+.dir.LONG{background:rgba(79,191,122,.14);color:var(--pos)}
+.dir.AVOID{background:rgba(224,112,108,.12);color:var(--neg)}
+.conf{display:flex;flex-direction:column;gap:4px}
+.conf .lbl{font-size:9.5px;color:var(--dim);display:flex;justify-content:space-between}
+.track{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.fill{height:100%;border-radius:2px;transition:width .5s}
+.wt{text-align:right;font-size:12px;font-variant-numeric:tabular-nums}
+.wt .big{font-family:var(--disp);font-size:15px;font-weight:600}
+.wt .zero{color:var(--dim)}
+@media(max-width:860px){
+  .row{grid-template-columns:24px 1fr 76px 78px;grid-template-areas:"r t v w" ". n n n";row-gap:8px}
+  .rank{grid-area:r}.tk{grid-area:t}.view{grid-area:v}.wt{grid-area:w}
+  .note-cell{grid-area:n}.conf{display:none}
+}
+
+/* two col */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+
+/* blotter */
+.blotter{font-size:12px;max-height:290px;overflow-y:auto}
+.blotter::-webkit-scrollbar{width:7px}
+.blotter::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.o-row{display:flex;gap:10px;align-items:center;padding:8px 3px;border-bottom:1px solid var(--line2)}
+.o-row:last-child{border-bottom:none}
+.side{font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:3px;width:38px;text-align:center;flex:none}
+.side.BUY{background:rgba(79,191,122,.13);color:var(--pos)}
+.side.SELL{background:rgba(224,112,108,.13);color:var(--neg)}
+.o-tk{width:52px;flex:none;font-weight:500}
+.o-qty{flex:1;color:var(--muted);font-size:11.5px}
+.o-not{text-align:right;flex:none;width:96px;font-variant-numeric:tabular-nums}
+.o-stat{font-size:9px;color:var(--dim);width:74px;text-align:right;flex:none}
+.empty{color:var(--dim);font-size:12px;padding:16px 3px;text-align:center}
+
+/* fan chart */
+.fan-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+.fan{background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:10px}
+.fan .ft{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.fan .fn{font-family:var(--disp);font-size:12.5px;font-weight:600}
+.fan .fv{font-size:10.5px;font-variant-numeric:tabular-nums}
+svg{display:block;width:100%;height:52px;overflow:visible}
+
+/* performance */
+.perf{display:grid;grid-template-columns:1.55fr 1fr;gap:20px}
+@media(max-width:900px){.perf{grid-template-columns:1fr}}
+.chart{height:210px;width:100%;overflow:visible}
+.legend{display:flex;gap:14px;font-size:10.5px;color:var(--muted);margin-top:9px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:2px;vertical-align:middle;margin-right:5px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.metric{background:var(--panel);padding:11px 13px}
+.metric .k{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.metric .v{font-family:var(--disp);font-size:16px;font-weight:600}
+.metric .n{font-size:9.5px;color:var(--dim);margin-top:2px}
+.gate{margin-top:12px;padding:10px 12px;border-radius:5px;font-size:11px;line-height:1.65;
+  border:1px solid rgba(212,162,76,.3);background:rgba(212,162,76,.07);color:var(--portfolio)}
+
+.diag{font-size:11px;color:var(--muted);line-height:1.9}
+.diag b{color:var(--text);font-weight:500}
+.diag .warn{color:var(--neg)}
+
+footer{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);
+  font-size:10.5px;color:var(--dim);line-height:1.85}
+footer p{margin:0 0 6px}
+.loading{text-align:center;padding:70px 20px;color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>펀드매니저 에이전트</h1>
+      <div class="sub">Kronos · skfolio · NautilusTrader · PM 감독</div>
+    </div>
+    <div class="controls">
+      <span class="pill paper live-dot">PAPER ONLY</span>
+      <span class="pill src" id="pmSrc">—</span>
+      <span class="pill fresh" id="freshness">—</span>
+      <button id="pmBtn" style="display:none"
+        title="지금 화면의 사이클에 대해 LLM 논평을 새로 받습니다. 시장 데이터를 다시 부르거나 주문을 만들지 않습니다.">PM 논평 받기 ($)</button>
+      <button id="runBtn">사이클 실행</button>
+      <button id="refreshBtn">새로고침</button>
+    </div>
+  </div>
+
+  <div id="root"><div class="loading">에이전트 상태를 불러오는 중…</div></div>
+</div>
+
+<script>
+const COLORS={SPY:'#6d8fd4',QQQ:'#a479c9',IWM:'#c98b6a',TLT:'#3fb0a0',IEF:'#4d9e91',
+  GLD:'#d4a24c',SLV:'#9aa6b4',XLE:'#cf7355',XLF:'#5b9bd4',XLK:'#8a7fd0'};
+const c=t=>COLORS[t]||'#7b8794';
+const usd=v=>'$'+Math.round(v).toLocaleString('en-US');
+const pct=v=>(v>=0?'+':'')+v.toFixed(2)+'%';
+let polling=null;
+
+async function load(){
+  try{
+    const r=await fetch('/api/state',{cache:'no-store'});
+    if(!r.ok){
+      const e=await r.json().catch(()=>({error:'상태를 읽을 수 없습니다'}));
+      document.getElementById('root').innerHTML=
+        `<div class="loading">${e.error||'상태 없음'}</div>`;
+      return;
+    }
+    render(await r.json());
+  }catch(err){
+    document.getElementById('root').innerHTML=
+      `<div class="loading">서버에 연결할 수 없습니다. <code>python server.py</code> 가 실행 중인지 확인하세요.</div>`;
+  }
+}
+
+function fanSVG(f,last){
+  const all=[...f.p05,...f.p50,...f.p95,last];
+  const lo=Math.min(...all),hi=Math.max(...all),rng=(hi-lo)||1;
+  const n=f.p50.length, W=100, H=48;
+  const X=i=>(i/(n-1||1))*W, Y=v=>H-((v-lo)/rng)*H;
+  const up=f.p05.map((v,i)=>`${X(i)},${Y(v)}`).join(' ');
+  const dn=f.p95.map((v,i)=>`${X(i)},${Y(v)}`).reverse().join(' ');
+  const mid=f.p50.map((v,i)=>`${X(i)},${Y(v)}`).join(' ');
+  const rising=f.p50[n-1]>=last;
+  const col=rising?'#4fbf7a':'#e0706c';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <polygon points="${up} ${dn}" fill="${col}" opacity=".14"/>
+    <polyline points="${mid}" fill="none" stroke="${col}" stroke-width="1.6"/>
+    <line x1="0" y1="${Y(last)}" x2="${W}" y2="${Y(last)}" stroke="#59636f"
+      stroke-width=".8" stroke-dasharray="2,2"/>
+  </svg>`;
+}
+
+function curveSVG(curve){
+  const pts=curve.filter(p=>p.strategy!=null);
+  if(pts.length<2) return `<div class="empty">사이클이 2회 이상 쌓이면 자산 곡선이 그려집니다
+    (현재 ${pts.length}회)</div>`;
+  const bm=pts.filter(p=>p.benchmark!=null);
+  const vals=[...pts.map(p=>p.strategy),...bm.map(p=>p.benchmark)];
+  let lo=Math.min(...vals),hi=Math.max(...vals);
+  const pad=(hi-lo)*0.12||1; lo-=pad; hi+=pad;
+  const W=100,H=52,rng=hi-lo;
+  const X=(i,n)=>(i/((n-1)||1))*W, Y=v=>H-((v-lo)/rng)*H;
+  const path=(arr,key)=>arr.map((p,i)=>`${X(i,arr.length)},${Y(p[key])}`).join(' ');
+  const base=Y(100);
+  const last=pts[pts.length-1].strategy;
+  const col=last>=100?'#4fbf7a':'#e0706c';
+  // 기준선(100)과 두 곡선. 벤치마크는 점선으로 겹쳐 그린다.
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="#59636f" stroke-width=".5"
+      stroke-dasharray="1.5,1.5" vector-effect="non-scaling-stroke"/>
+    ${bm.length>1?`<polyline points="${path(bm,'benchmark')}" fill="none" stroke="#8b96a5"
+      stroke-width="1.2" stroke-dasharray="3,2" vector-effect="non-scaling-stroke"/>`:''}
+    <polyline points="${path(pts,'strategy')}" fill="none" stroke="${col}"
+      stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+  </svg>
+  <div class="legend">
+    <span><i style="background:${col}"></i>전략 (${last.toFixed(1)})</span>
+    ${bm.length>1?`<span><i style="background:#8b96a5"></i>SPY 매수 후 보유
+      (${bm[bm.length-1].benchmark.toFixed(1)})</span>`:''}
+    <span style="color:var(--dim)">시작 = 100 · ${pts.length}개 사이클</span>
+  </div>`;
+}
+
+function metricsHTML(pf){
+  const n=v=>v==null?'—':v;
+  const items=[
+    ['샤프',n(pf.sharpe),pf.annualized?'연율화':'사이클 부족'],
+    ['최대 낙폭',pf.max_drawdown_pct==null?'—':'-'+pf.max_drawdown_pct.toFixed(2)+'%',
+      pf.benchmark_max_drawdown_pct==null?'':'SPY -'+pf.benchmark_max_drawdown_pct.toFixed(2)+'%'],
+    ['변동성',pf.volatility_annual_pct==null?'—':pf.volatility_annual_pct.toFixed(1)+'%','연율화'],
+    ['승률',pf.win_rate_pct==null?'—':pf.win_rate_pct.toFixed(0)+'%','플러스 사이클 비율'],
+    ['평균 회전율',pf.avg_turnover_pct==null?'—':pf.avg_turnover_pct.toFixed(1)+'%','사이클당'],
+    ['누적 거래비용',pf.total_costs==null?'—':usd(pf.total_costs),
+      pf.cost_drag_pct==null?'':'원금의 '+pf.cost_drag_pct.toFixed(2)+'%'],
+  ];
+  return items.map(([k,v,note])=>
+    `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div>
+     <div class="n">${note||''}</div></div>`).join('');
+}
+
+function riskGateHTML(meta){
+  const rg=meta.risk_gate||{}, tg=meta.turnover_gate||{};
+  const msgs=[];
+  if(rg.triggered) msgs.push(`<b>리스크 게이트 발동</b> — ${rg.reason}.
+    목표 노출을 ${(rg.exposure*100).toFixed(0)}%로 줄이고 나머지는 현금으로 두었습니다.`);
+  if(tg.scaled) msgs.push(`<b>회전율 게이트 발동</b> — 기존 포지션의
+    ${(tg.sell_turnover*100).toFixed(0)}%를 교체해야 해 한도 ${(tg.limit*100).toFixed(0)}%를
+    넘었습니다. 목표의 ${(tg.scale*100).toFixed(0)}%만 반영해 단계적으로 이동합니다.`);
+  if(!msgs.length) return `<div class="gate" style="border-color:var(--line);
+    background:var(--panel);color:var(--dim)">리스크·회전율 게이트 모두 정상 범위입니다
+    (낙폭 ${(rg.drawdown_pct??0).toFixed(2)}%).</div>`;
+  return `<div class="gate">${msgs.join('<br><br>')}</div>`;
+}
+
+function render(s){
+  const m=s.meta, p=s.portfolio, wl=s.watchlist, notes=s.watch_notes||{};
+  const isRules=(s.pm_source||'').startsWith('rules');
+  document.getElementById('pmSrc').textContent =
+    isRules ? 'PM: 룰 기반 (무료)' : 'PM: '+s.pm_source.replace('llm:','');
+  // LLM 을 쓸 수 있고 지금 논평이 룰 기반일 때만 유료 버튼을 노출한다.
+  // 호출 주체는 서버이므로 서버가 알려준 값(_llm_available)을 우선한다 —
+  // 스냅샷처럼 서버가 없는 문맥에서는 사이클 당시 값으로 폴백한다.
+  const llmAvail = (s._llm_available!==undefined) ? s._llm_available : m.pm_llm_available;
+  document.getElementById('pmBtn').style.display =
+    (llmAvail && isRules) ? '' : 'none';
+  const gen=new Date(s.generated_at);
+  const mins=Math.round((Date.now()-gen)/60000);
+  document.getElementById('freshness').textContent =
+    mins<1?'방금 갱신':(mins<60?`${mins}분 전`:`${Math.round(mins/60)}시간 전`);
+
+  const held=Object.entries(p.weights).filter(([,w])=>w>1e-6);
+  const pf=s.performance||{};
+  const cashPct=(p.cash_weight!=null?p.cash_weight*100:0);
+  const ex=pf.excess_return_pct;
+  const stats=[
+    ['평가자산',usd(p.equity),''],
+    ['직전 사이클',pct(p.period_return_pct),p.period_return_pct>=0?'pos':'neg'],
+    ['누적 수익',pf.cum_return_pct==null?'—':pct(pf.cum_return_pct),
+      pf.cum_return_pct==null?'':(pf.cum_return_pct>=0?'pos':'neg')],
+    ['SPY 대비',ex==null?'—':pct(ex),ex==null?'':(ex>=0?'pos':'neg')],
+    ['현금',cashPct.toFixed(1)+'%',''],
+    ['보유 · 주문',held.length+'종목 · '+s.orders.length+'건',''],
+  ];
+
+  const rows=wl.map(w=>{
+    const wt=p.weights[w.ticker]||0, isHeld=wt>1e-6;
+    return `<div class="row ${isHeld?'held':'watch'}">
+      <div class="rank">${w.rank}</div>
+      <div class="tk" style="color:${c(w.ticker)}">${w.ticker}
+        <small>$${w.last_close.toFixed(2)}</small></div>
+      <div class="note-cell">${notes[w.ticker]||''}</div>
+      <div class="view" style="color:${w.view_horizon_pct>=0?'var(--pos)':'var(--neg)'}">
+        ${pct(w.view_horizon_pct)}<br><span class="dir ${w.direction}">${w.direction}</span></div>
+      <div class="conf">
+        <div class="lbl"><span>확신도</span><span>${(w.confidence*100).toFixed(0)}%</span></div>
+        <div class="track"><div class="fill" style="width:${w.confidence*100}%;background:${c(w.ticker)}"></div></div>
+        <div class="lbl"><span>상승경로</span><span>${(w.up_path_ratio*100).toFixed(0)}%</span></div>
+      </div>
+      <div class="wt">${isHeld
+        ? `<span class="big" style="color:${c(w.ticker)}">${(wt*100).toFixed(1)}%</span>`
+        : `<span class="zero">—</span>`}
+        <br><span style="font-size:9.5px;color:var(--dim)">${isHeld?'보유':'미편입'}</span></div>
+    </div>`;
+  }).join('');
+
+  const fans=wl.slice(0,8).map(w=>`
+    <div class="fan">
+      <div class="ft"><span class="fn" style="color:${c(w.ticker)}">${w.ticker}</span>
+        <span class="fv" style="color:${w.view_horizon_pct>=0?'var(--pos)':'var(--neg)'}">${pct(w.view_horizon_pct)}</span></div>
+      ${fanSVG(w.fan,w.last_close)}
+    </div>`).join('');
+
+  const orders=s.orders.length? s.orders.map(o=>`
+    <div class="o-row">
+      <div class="side ${o.side}">${o.side}</div>
+      <div class="o-tk" style="color:${c(o.ticker)}">${o.ticker}</div>
+      <div class="o-qty">${o.quantity.toLocaleString()}주 @ $${o.price.toFixed(2)}${
+        o.cost!=null?` <span style="color:var(--dim)">· 비용 $${o.cost.toFixed(0)}</span>`:''}</div>
+      <div class="o-not">${usd(o.notional)}</div>
+      <div class="o-stat">${o.status}</div>
+    </div>`).join('')
+    : '<div class="empty">이번 사이클은 회전율 제약 안에서 조정할 것이 없었습니다</div>';
+
+  const bl=p.meta.bl_shift_bp||{};
+  const blRows=Object.entries(bl).map(([t,v])=>
+    `<span style="color:${c(t)}">${t}</span> ${v>=0?'+':''}${v}bp`).join(' · ');
+
+  document.getElementById('root').innerHTML=`
+    <div class="stats">${stats.map(([k,v,cl])=>
+      `<div class="stat"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('')}</div>
+
+    <section>
+      <div class="head"><div class="title">에이전트 의견</div>
+        <div class="note">읽고 논평만 — 주문 경로에 관여하지 않음</div></div>
+      <div class="panel opinion">
+        <div class="who">◆ PM · 감독 데스크 · ${s.as_of}</div>
+        <p>${s.pm_opinion}</p>
+        <div class="foot">
+          출처: ${isRules
+            ? '결정론적 룰 기반 — 비용 0 · 사유: ' + (s.pm_source.split(':')[1]||'')
+            : s.pm_source + ' (유료 호출)'}<br>
+          LLM 정책: <b>${s._llm_mode||m.pm_llm_mode||'once'}</b> ·
+          ${llmAvail?`지금까지 실제 호출 <b>${s.llm_calls||0}</b>회`:'API 키 없음 — 항상 무료'}
+          · 대시보드 새로고침·폴링은 저장된 파일만 읽으므로 비용이 발생하지 않습니다.${
+            llmAvail&&isRules?' 이 사이클에 대한 LLM 논평이 필요하면 상단 <b>PM 논평 받기 ($)</b> 버튼을 누르세요 — 시장 데이터를 다시 부르거나 주문을 만들지 않고 논평만 새로 씁니다.':''}<br>
+          이 논평은 어떤 비중도 바꾸지 않았고 어떤 주문도 만들지 않았습니다.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><div class="title">성과 추이</div>
+        <div class="note">사이클 #${s.cycle_no} · 기준일 ${s.as_of} ·
+          거래비용 ${m.tx_cost_bps}bp 차감 후 · 슬리피지는 모델링하지 않음</div></div>
+      <div class="perf">
+        <div class="panel">${curveSVG(s.equity_curve||[])}</div>
+        <div>
+          <div class="metrics">${metricsHTML(pf)}</div>
+          ${riskGateHTML(p.meta)}
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><div class="title">주목 종목</div>
+        <div class="note">Kronos가 워치리스트 ${m.watchlist_size}종목을 스캔 · 주목도 = 확신도 × 견해 크기(절댓값)<br>
+          하락 견해가 강한 종목도 상위에 오릅니다 — 편입 대상이 아니므로 AVOID 로 표시됩니다</div></div>
+      <div class="board">${rows}</div>
+    </section>
+
+    <section>
+      <div class="head"><div class="title">예측 경로</div>
+        <div class="note">${m.sample_count}개 경로의 5·50·95 분위 · 향후 ${m.pred_len}거래일 · 점선은 현재가</div></div>
+      <div class="panel"><div class="fan-wrap">${fans}</div></div>
+    </section>
+
+    <section class="cols">
+      <div>
+        <div class="head"><div class="title">주문 (모의)</div>
+          <div class="note">NautilusTrader MarketOrder · 전송 안 됨</div></div>
+        <div class="panel"><div class="blotter">${orders}</div></div>
+      </div>
+      <div>
+        <div class="head"><div class="title">진단</div>
+          <div class="note">이번 사이클이 어떻게 나왔나</div></div>
+        <div class="panel"><div class="diag">
+          ${(p.degraded&&p.degraded.length)
+            ? `<span class="warn">⚠ 데이터 결손: ${p.degraded.join(', ')} 의 가격을 받지 못해
+               주문을 만들지 못했고 장부를 정규화했습니다. 이 사이클의 비중은 의도된 결과가 아닙니다.</span><br>`
+            : ''}
+          최적화: <b>${p.meta.fallback_used
+            ? '<span class="warn">실패 → 동일가중 후퇴</span>'
+            : 'CVaR ' + (p.meta.constraints.cvar_beta*100) + '% 정상 해'}</b><br>
+          ${p.meta.fallback_used?`<span class="warn">사유: ${p.meta.fallback_reason||'-'}</span><br>`:''}
+          제약: 단일 상한 <b>${(m.max_weight*100).toFixed(0)}%</b> ·
+            회전율 <b>${p.meta.constraints.max_turnover!=null?(m.max_turnover*100).toFixed(0)+'%':'미적용(최초 편입)'}</b> ·
+            비용 <b>${m.tx_cost_bps}bp</b><br>
+          장부: 현금 <b>${usd(p.cash||0)}</b> (${((p.cash_weight||0)*100).toFixed(1)}%) ·
+            실현 회전율 <b>${((p.turnover||0)*100).toFixed(1)}%</b> ·
+            누적 비용 <b>${usd(p.costs_paid||0)}</b><br>
+          보유 주식: ${Object.entries(p.positions||{}).map(([t,q])=>
+            `<span style="color:${c(t)}">${t}</span> ${q.toLocaleString()}주`).join(' · ')||'없음'}<br>
+          BL 사후 이동: ${blRows||'-'}<br>
+          <span style="color:var(--dim)">사후 이동이 클수록 견해가 많이 반영된 것이고, 0에 가까우면
+          모델이 확신을 못 줘서 시장 균형 쪽으로 되돌아간 것입니다.</span><br><br>
+          연구: <b>${m.kronos_model}</b> · lookback <b>${m.lookback}</b>일 · 경로 <b>${m.sample_count}</b>개<br>
+          skfolio <b>v${m.versions.skfolio}</b> · nautilus_trader <b>v${m.versions.nautilus_trader}</b><br>
+          사이클 소요 <b>${s.elapsed_sec}s</b>
+        </div></div>
+      </div>
+    </section>
+
+    <footer>
+      <p>전 구간 모의투자입니다. 브로커 커넥터가 연결돼 있지 않고, 실거래 주문 전송 경로가 코드에 존재하지 않습니다.</p>
+      <p>Kronos의 예측력은 원문 저자의 독립 검증에서 무작위 걷기 베이스라인과 통계적으로 구분되지 않았습니다(Brier 0.189 vs 0.188). 위 견해와 확신도는 그 한계를 그대로 물려받습니다.</p>
+      <p>확신도는 워치리스트 안에서의 상대 순위이지, 절대적 예측 신뢰도가 아닙니다. 투자 조언이 아니며, 투자 판단과 그 결과는 본인 책임입니다.</p>
+    </footer>`;
+}
+
+document.getElementById('refreshBtn').onclick=load;
+document.getElementById('pmBtn').onclick=async function(){
+  const label=this.textContent;
+  this.disabled=true; this.textContent='LLM 호출 중…';
+  try{
+    const r=await fetch('/api/pm-opinion',{method:'POST'});
+    const j=await r.json().catch(()=>({ok:false,message:'응답을 읽을 수 없습니다'}));
+    await load();
+    if(!j.ok){
+      // 실패 사유를 버튼 자리에 잠깐 띄운다 (다이얼로그를 띄우지 않는다)
+      this.textContent='실패 — '+(j.message||'').slice(0,24);
+      setTimeout(()=>{this.textContent=label; this.disabled=false;},4000);
+      return;
+    }
+  }catch(e){
+    this.textContent='서버 연결 실패';
+    setTimeout(()=>{this.textContent=label; this.disabled=false;},4000);
+    return;
+  }
+  this.disabled=false; this.textContent=label;
+};
+document.getElementById('runBtn').onclick=async function(){
+  this.disabled=true; this.textContent='실행 중…';
+  try{
+    await fetch('/api/run-cycle',{method:'POST'});
+    const t=setInterval(async()=>{
+      const r=await fetch('/api/state',{cache:'no-store'});
+      if(r.ok){const s=await r.json(); if(!s._running){clearInterval(t);
+        document.getElementById('runBtn').disabled=false;
+        document.getElementById('runBtn').textContent='사이클 실행'; render(s);}}
+    },3000);
+  }catch(e){
+    this.disabled=false; this.textContent='사이클 실행';
+  }
+};
+
+load();
+polling=setInterval(load,15000);
+</script>
+</body>
+</html>

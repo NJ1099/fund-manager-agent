@@ -1,0 +1,25 @@
+# 시크릿
+.env
+
+# 상태 (사이클마다 갱신되는 로컬 데이터, 커밋 대상 아님)
+state/*.json
+state/*.jsonl
+
+# Kronos 원본 레포 (README 설치 단계에서 별도 클론, 서브모듈 아님)
+Kronos/
+
+# 파이썬
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 스냅샷 산출물
+agent_snapshot.html
+*.log
+
+# 백테스트 산출물 (로컬 실행 결과, 커밋 대상 아님)
+reports/
+
+# 데모 생성 시 쓰는 별도 상태 (운영자 state/ 와 분리)
+demo_state/

@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>펀드매니저 에이전트 — 실시간</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230f141c'/%3E%3Cpath d='M3 11.5L6 7l3 2.5L13 4' stroke='%234fbf7a' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080b10; --panel:#0f141c; --panel2:#141b26; --line:#1e2733; --line2:#161e28;
+  --text:#e8edf4; --muted:#8b96a5; --dim:#59636f;
+  --research:#3fb0a0; --portfolio:#d4a24c; --exec:#6d8fd4; --pm:#a479c9;
+  --pos:#4fbf7a; --neg:#e0706c;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --disp:'Space Grotesk',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 18px 70px}
+
+/* topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  padding-bottom:16px;border-bottom:1px solid var(--line)}
+.brand h1{font-family:var(--disp);font-size:20px;font-weight:600;margin:0 0 5px;letter-spacing:-.01em}
+.brand .sub{font-size:11px;color:var(--dim)}
+.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:3px;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;border:1px solid}
+.pill.paper{background:rgba(224,112,108,.1);color:var(--neg);border-color:rgba(224,112,108,.3)}
+.pill.live-dot::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pill.src{background:rgba(164,121,201,.1);color:var(--pm);border-color:rgba(164,121,201,.3)}
+.pill.fresh{background:rgba(79,191,122,.08);color:var(--pos);border-color:rgba(79,191,122,.25)}
+button{font-family:var(--mono);font-size:11.5px;padding:7px 14px;border-radius:4px;cursor:pointer;
+  background:var(--panel2);color:var(--text);border:1px solid var(--line);transition:.15s}
+button:hover:not(:disabled){background:#1c2534;border-color:#2b3746}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible{outline:2px solid var(--exec);outline-offset:2px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:20px 0 26px}
+.stat{background:var(--panel);padding:13px 14px}
+.stat .k{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.stat .v{font-family:var(--disp);font-size:19px;font-weight:600}
+.v.pos{color:var(--pos)}.v.neg{color:var(--neg)}
+@media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* sections */
+section{margin-bottom:28px}
+.head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.title{font-family:var(--disp);font-size:16px;font-weight:600}
+.note{font-size:11px;color:var(--dim)}
+.panel{background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:16px}
+
+/* PM opinion — signature block */
+.opinion{border-left:3px solid var(--pm);background:linear-gradient(90deg,rgba(164,121,201,.06),transparent 60%)}
+.opinion .who{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--pm);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.opinion p{margin:0;font-size:13.5px;line-height:1.85;color:var(--text)}
+.opinion .foot{margin-top:12px;padding-top:10px;border-top:1px solid var(--line2);
+  font-size:10.5px;color:var(--dim);line-height:1.6}
+
+/* conviction board */
+.board{display:grid;gap:8px}
+.row{display:grid;grid-template-columns:26px 62px 1fr 78px 96px 84px;gap:12px;align-items:center;
+  background:var(--panel);border:1px solid var(--line2);border-radius:5px;padding:11px 13px;transition:.15s}
+.row:hover{border-color:#26313f;background:var(--panel2)}
+.row.held{border-left:3px solid var(--exec)}
+.row.watch{border-left:3px solid var(--line)}
+.rank{font-family:var(--disp);font-size:15px;font-weight:600;color:var(--dim)}
+.row.held .rank{color:var(--exec)}
+.tk{font-family:var(--disp);font-size:15px;font-weight:600}
+.tk small{display:block;font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400;margin-top:2px}
+.note-cell{font-size:11px;color:var(--muted);line-height:1.5}
+.view{text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
+.dir{display:inline-block;font-size:8.5px;font-weight:600;letter-spacing:.06em;
+  padding:1px 5px;border-radius:2px;margin-top:3px}
+.dir.LONG{background:rgba(79,191,122,.14);color:var(--pos)}
+.dir.AVOID{background:rgba(224,112,108,.12);color:var(--neg)}
+.conf{display:flex;flex-direction:column;gap:4px}
+.conf .lbl{font-size:9.5px;color:var(--dim);display:flex;justify-content:space-between}
+.track{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.fill{height:100%;border-radius:2px;transition:width .5s}
+.wt{text-align:right;font-size:12px;font-variant-numeric:tabular-nums}
+.wt .big{font-family:var(--disp);font-size:15px;font-weight:600}
+.wt .zero{color:var(--dim)}
+@media(max-width:860px){
+  .row{grid-template-columns:24px 1fr 76px 78px;grid-template-areas:"r t v w" ". n n n";row-gap:8px}
+  .rank{grid-area:r}.tk{grid-area:t}.view{grid-area:v}.wt{grid-area:w}
+  .note-cell{grid-area:n}.conf{display:none}
+}
+
+/* two col */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+
+/* blotter */
+.blotter{font-size:12px;max-height:290px;overflow-y:auto}
+.blotter::-webkit-scrollbar{width:7px}
+.blotter::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.o-row{display:flex;gap:10px;align-items:center;padding:8px 3px;border-bottom:1px solid var(--line2)}
+.o-row:last-child{border-bottom:none}
+.side{font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:3px;width:38px;text-align:center;flex:none}
+.side.BUY{background:rgba(79,191,122,.13);color:var(--pos)}
+.side.SELL{background:rgba(224,112,108,.13);color:var(--neg)}
+.o-tk{width:52px;flex:none;font-weight:500}
+.o-qty{flex:1;color:var(--muted);font-size:11.5px}
+.o-not{text-align:right;flex:none;width:96px;font-variant-numeric:tabular-nums}
+.o-stat{font-size:9px;color:var(--dim);width:74px;text-align:right;flex:none}
+.empty{color:var(--dim);font-size:12px;padding:16px 3px;text-align:center}
+
+/* fan chart */
+.fan-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+.fan{background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:10px}
+.fan .ft{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.fan .fn{font-family:var(--disp);font-size:12.5px;font-weight:600}
+.fan .fv{font-size:10.5px;font-variant-numeric:tabular-nums}
+svg{display:block;width:100%;height:52px;overflow:visible}
+
+/* performance */
+.perf{display:grid;grid-template-columns:1.55fr 1fr;gap:20px}
+@media(max-width:900px){.perf{grid-template-columns:1fr}}
+.chart{height:210px;width:100%;overflow:visible}
+.legend{display:flex;gap:14px;font-size:10.5px;color:var(--muted);margin-top:9px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:2px;vertical-align:middle;margin-right:5px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.metric{background:var(--panel);padding:11px 13px}
+.metric .k{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.metric .v{font-family:var(--disp);font-size:16px;font-weight:600}
+.metric .n{font-size:9.5px;color:var(--dim);margin-top:2px}
+.gate{margin-top:12px;padding:10px 12px;border-radius:5px;font-size:11px;line-height:1.65;
+  border:1px solid rgba(212,162,76,.3);background:rgba(212,162,76,.07);color:var(--portfolio)}
+
+.diag{font-size:11px;color:var(--muted);line-height:1.9}
+.diag b{color:var(--text);font-weight:500}
+.diag .warn{color:var(--neg)}
+
+footer{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);
+  font-size:10.5px;color:var(--dim);line-height:1.85}
+footer p{margin:0 0 6px}
+.loading{text-align:center;padding:70px 20px;color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>펀드매니저 에이전트</h1>
+      <div class="sub">Kronos · skfolio · NautilusTrader · PM 감독 · 스냅샷 (사이클 #14, 2026-08-24 기준)</div>
+    </div>
+    <div class="controls">
+      <span class="pill paper live-dot">PAPER ONLY</span>
+      <span class="pill src" id="pmSrc">—</span>
+      <span class="pill fresh" id="freshness">—</span>
+      <button id="pmBtn" style="display:none"
+        title="지금 화면의 사이클에 대해 LLM 논평을 새로 받습니다. 시장 데이터를 다시 부르거나 주문을 만들지 않습니다.">PM 논평 받기 ($)</button>
+      <button id="runBtn">사이클 실행</button>
+      <button id="refreshBtn">새로고침</button>
+    </div>
+  </div>
+
+  <script id="snapshot-state" type="application/json">{"meta": {"execution_mode": "paper", "live_orders_allowed": false, "pm_source": "rules:PM_LLM_MODE=never", "pm_llm_mode": "never", "pm_llm_available": true, "kronos_model": "NeoQuasar/Kronos-mini", "sample_count": 16, "pred_len": 5, "lookback": 300, "top_k": 5, "watchlist_size": 10, "benchmark": "SPY", "max_turnover": 0.1, "turnover_hard_limit": 0.25, "tx_cost_bps": 10.0, "max_weight": 0.4, "max_drawdown_limit": 0.2, "versions": {"skfolio": "0.20.2", "nautilus_trader": "1.231.0"}}, "cycle_no": 14, "as_of": "2026-08-24", "generated_at": "2026-08-24T14:13:50.696749+00:00", "elapsed_sec": 14.2, "order_seq": 55, "llm_calls": 0, "prices": {"SPY": 762.6400146484375, "QQQ": 703.0900268554688, "IWM": 298.55999755859375, "TLT": 82.58180236816406, "IEF": 93.02999877929688, "GLD": 428.0199890136719, "SLV": 62.36989974975586, "XLE": 63.29999923706055, "XLF": 58.314998626708984, "XLK": 178.97000122070312}, "portfolio": {"equity": 1235629.26, "start_equity": 1000000.0, "peak_equity": 1235629.26, "period_return_pct": 1.958, "weights": {"GLD": 0.03775742474943563, "TLT": 0.25076042832331286, "XLF": 0.1519665336985054, "IEF": 0.39993820923059564, "XLE": 0.15921960089344386}, "target_weights": {"GLD": 0.038045214207291615, "IEF": 0.4000000000421987, "TLT": 0.25075415966909953, "XLE": 0.15923789230647672, "XLF": 0.15196273377493344}, "previous_weights": {"GLD": 0.040527598459316985, "TLT": 0.25075415799846673, "XLF": 0.15196273373876532, "IEF": 0.3875810275379852, "XLE": 0.16910256119604672}, "meta": {"solver": "CLARABEL", "fallback_used": false, "constraints": {"max_weight": 0.4, "max_turnover": 0.1, "tx_cost_bps": 10.0, "cvar_beta": 0.95}, "bl_shift_bp": {"XLK": 39.946, "SPY": 11.581, "TLT": 5.499, "IWM": 6.787, "XLE": -12.039, "GLD": -9.095, "XLF": -13.556, "IEF": -0.255}, "pick_fallback": false, "risk_gate": {"triggered": false, "reason": null, "exposure": 1.0, "drawdown_pct": 0.0}, "turnover_gate": {"gross_turnover": 0.024766, "sell_turnover": 0.012347, "limit": 0.25, "scaled": false, "scale": 1.0, "final_turnover": 0.012347, "skipped": false}}, "degraded": [], "cash": 442.11, "cash_weight": 0.000358, "positions": {"GLD": 109, "TLT": 3752, "XLF": 3220, "IEF": 5312, "XLE": 3108}, "costs_paid": 3384.9, "turnover": 0.02502, "turnover_sell": 0.012653}, "performance": {"n_cycles": 14, "cum_return_pct": 23.563, "benchmark_cum_return_pct": 21.326, "excess_return_pct": 2.237, "max_drawdown_pct": 2.067, "benchmark_max_drawdown_pct": 4.066, "volatility_annual_pct": 9.82, "sharpe": 2.18, "win_rate_pct": 76.9, "best_cycle_pct": 7.02, "worst_cycle_pct": -2.06, "avg_turnover_pct": 7.19, "total_costs": 3384.9, "cost_drag_pct": 0.338, "annualized": true}, "equity_curve": [{"as_of": "2025-08-21", "cycle_no": 1, "strategy": 99.9, "benchmark": 100.0}, {"as_of": "2025-09-19", "cycle_no": 2, "strategy": 106.662, "benchmark": 104.719}, {"as_of": "2025-10-17", "cycle_no": 3, "strategy": 114.124, "benchmark": 104.828}, {"as_of": "2025-11-14", "cycle_no": 4, "strategy": 111.765, "benchmark": 106.017}, {"as_of": "2025-12-15", "cycle_no": 5, "strategy": 114.23, "benchmark": 107.406}, {"as_of": "2026-01-14", "cycle_no": 6, "strategy": 118.063, "benchmark": 109.247}, {"as_of": "2026-02-12", "cycle_no": 7, "strategy": 120.152, "benchmark": 107.809}, {"as_of": "2026-03-13", "cycle_no": 8, "strategy": 117.894, "benchmark": 104.805}, {"as_of": "2026-04-13", "cycle_no": 9, "strategy": 119.179, "benchmark": 108.869}, {"as_of": "2026-05-11", "cycle_no": 10, "strategy": 119.976, "benchmark": 117.311}, {"as_of": "2026-06-09", "cycle_no": 11, "strategy": 119.535, "benchmark": 116.954}, {"as_of": "2026-07-09", "cycle_no": 12, "strategy": 119.742, "benchmark": 119.588}, {"as_of": "2026-08-06", "cycle_no": 13, "strategy": 121.194, "benchmark": 122.268}, {"as_of": "2026-08-24", "cycle_no": 14, "strategy": 123.563, "benchmark": 121.326}], "watchlist": [{"ticker": "XLK", "last_close": 178.97, "view_daily": 0.010272803902626037, "view_horizon_pct": 5.136, "dispersion": 0.025361396372318268, "up_path_ratio": 1.0, "fan": {"p05": [179.96, 181.15, 180.69, 179.44, 182.2], "p50": [184.27, 185.03, 184.88, 186.47, 188.06], "p95": [186.75, 188.79, 189.19, 191.85, 195.19]}, "mom_20d_pct": 2.68, "mom_60d_pct": -4.1, "realized_vol_pct": 33.94, "infer_sec": 1.23, "asof": "2026-08-24", "confidence": 0.338, "conviction": 1.736, "rank": 1, "direction": "LONG"}, {"ticker": "SPY", "last_close": 762.64, "view_daily": 0.0029514215886592863, "view_horizon_pct": 1.476, "dispersion": 0.012307646684348583, "up_path_ratio": 0.875, "fan": {"p05": [761.73, 760.55, 759.12, 762.38, 760.95], "p50": [770.08, 771.02, 769.55, 771.8, 773.97], "p95": [770.45, 779.2, 780.93, 784.19, 789.3]}, "mom_20d_pct": 3.19, "mom_60d_pct": 1.33, "realized_vol_pct": 13.34, "infer_sec": 1.2, "asof": "2026-08-24", "confidence": 0.638, "conviction": 0.9417, "rank": 2, "direction": "LONG"}, {"ticker": "XLF", "last_close": 58.31, "view_daily": -0.002245371043682098, "view_horizon_pct": -1.123, "dispersion": 0.011872398667037487, "up_path_ratio": 0.188, "fan": {"p05": [56.77, 56.27, 56.89, 56.43, 56.68], "p50": [57.18, 57.61, 57.59, 57.75, 57.55], "p95": [58.11, 58.46, 58.37, 58.47, 58.74]}, "mom_20d_pct": 2.52, "mom_60d_pct": 14.14, "realized_vol_pct": 12.49, "infer_sec": 1.21, "asof": "2026-08-24", "confidence": 0.648, "conviction": 0.7277, "rank": 3, "direction": "AVOID"}, {"ticker": "TLT", "last_close": 82.58, "view_daily": 0.0014562807977199555, "view_horizon_pct": 0.728, "dispersion": 0.006346392910927534, "up_path_ratio": 0.875, "fan": {"p05": [81.92, 82.42, 82.06, 82.46, 82.47], "p50": [82.49, 83.06, 82.87, 83.01, 83.1], "p95": [83.24, 83.52, 83.55, 83.85, 84.15]}, "mom_20d_pct": -1.0, "mom_60d_pct": -2.56, "realized_vol_pct": 12.08, "infer_sec": 1.22, "asof": "2026-08-24", "confidence": 0.774, "conviction": 0.5635, "rank": 4, "direction": "LONG"}, {"ticker": "SLV", "last_close": 62.37, "view_daily": -0.006508970260620117, "view_horizon_pct": -3.254, "dispersion": 0.03356432914733887, "up_path_ratio": 0.125, "fan": {"p05": [59.31, 58.7, 56.82, 58.1, 57.17], "p50": [61.45, 61.76, 60.83, 60.86, 60.59], "p95": [62.19, 63.68, 64.22, 64.41, 63.58]}, "mom_20d_pct": 17.83, "mom_60d_pct": -8.76, "realized_vol_pct": 37.01, "infer_sec": 1.23, "asof": "2026-08-24", "confidence": 0.15, "conviction": 0.4881, "rank": 5, "direction": "AVOID"}, {"ticker": "IWM", "last_close": 298.56, "view_daily": 0.001800806075334549, "view_horizon_pct": 0.9, "dispersion": 0.02130858600139618, "up_path_ratio": 0.5, "fan": {"p05": [296.9, 294.87, 294.81, 293.95, 294.32], "p50": [300.26, 298.84, 299.6, 299.88, 299.49], "p95": [306.98, 308.97, 308.53, 309.28, 312.91]}, "mom_20d_pct": 1.93, "mom_60d_pct": 2.48, "realized_vol_pct": 15.7, "infer_sec": 1.22, "asof": "2026-08-24", "confidence": 0.431, "conviction": 0.3879, "rank": 6, "direction": "LONG"}, {"ticker": "GLD", "last_close": 428.02, "view_daily": -0.0019120469689369202, "view_horizon_pct": -0.956, "dispersion": 0.023615453392267227, "up_path_ratio": 0.312, "fan": {"p05": [420.24, 419.51, 412.17, 409.8, 407.93], "p50": [426.39, 425.33, 425.86, 425.8, 423.26], "p95": [435.64, 436.27, 436.25, 440.47, 439.01]}, "mom_20d_pct": 14.25, "mom_60d_pct": 3.69, "realized_vol_pct": 25.49, "infer_sec": 1.22, "asof": "2026-08-24", "confidence": 0.378, "conviction": 0.3614, "rank": 7, "direction": "AVOID"}, {"ticker": "QQQ", "last_close": 703.09, "view_daily": -0.0013606958091259003, "view_horizon_pct": -0.68, "dispersion": 0.022454960271716118, "up_path_ratio": 0.438, "fan": {"p05": [647.76, 667.75, 667.44, 669.7, 668.93], "p50": [690.93, 690.64, 693.32, 697.43, 701.43], "p95": [705.05, 715.03, 717.49, 714.84, 719.44]}, "mom_20d_pct": 3.07, "mom_60d_pct": -4.31, "realized_vol_pct": 23.2, "infer_sec": 1.23, "asof": "2026-08-24", "confidence": 0.405, "conviction": 0.2754, "rank": 8, "direction": "AVOID"}, {"ticker": "IEF", "last_close": 93.03, "view_daily": -0.0002289034426212311, "view_horizon_pct": -0.114, "dispersion": 0.0030507638584822416, "up_path_ratio": 0.375, "fan": {"p05": [92.76, 92.74, 92.58, 92.57, 92.55], "p50": [93.15, 93.07, 93.0, 92.93, 92.9], "p95": [93.38, 93.23, 93.34, 93.38, 93.36]}, "mom_20d_pct": 0.07, "mom_60d_pct": -0.6, "realized_vol_pct": 4.86, "infer_sec": 1.22, "asof": "2026-08-24", "confidence": 0.85, "conviction": 0.0969, "rank": 9, "direction": "AVOID"}, {"ticker": "XLE", "last_close": 63.3, "view_daily": 2.4610012769699096e-05, "view_horizon_pct": 0.012, "dispersion": 0.014531741850078106, "up_path_ratio": 0.5, "fan": {"p05": [62.9, 61.78, 62.29, 62.05, 61.97], "p50": [63.41, 63.32, 62.84, 62.96, 63.3], "p95": [63.99, 63.85, 64.09, 64.3, 64.49]}, "mom_20d_pct": 8.46, "mom_60d_pct": 11.95, "realized_vol_pct": 23.79, "infer_sec": 1.19, "asof": "2026-08-24", "confidence": 0.587, "conviction": 0.007, "rank": 10, "direction": "LONG"}], "watch_notes": {"XLK": "경로가 넓어 판단 보류 · 견해 +5.1%는 이례적으로 큼, 재확인 필요", "SPY": "확신도는 높으나 견해 크기가 작아 미편입", "XLF": "확신도와 비중이 함께 높은 핵심 보유", "TLT": "확신도와 비중이 함께 높은 핵심 보유", "SLV": "경로가 넓어 판단 보류 · 견해 -3.3%는 이례적으로 큼, 재확인 필요", "IWM": "경로가 넓어 판단 보류", "GLD": "소액 편입, 관찰 유지", "QQQ": "경로가 넓어 판단 보류", "IEF": "확신도와 비중이 함께 높은 핵심 보유", "XLE": "확신도와 비중이 함께 높은 핵심 보유"}, "picks": ["XLK", "SPY", "TLT", "IWM", "XLE"], "orders": [{"ts": "2026-08-24 00:00", "client_order_id": "O-000053", "instrument": "XLE.SIM", "ticker": "XLE", "side": "SELL", "quantity": 193, "price": 63.3, "notional": 12216.9, "cost": 12.22, "status": "SIMULATED"}, {"ts": "2026-08-24 00:00", "client_order_id": "O-000054", "instrument": "GLD.SIM", "ticker": "GLD", "side": "SELL", "quantity": 8, "price": 428.02, "notional": 3424.16, "cost": 3.42, "status": "SIMULATED"}, {"ts": "2026-08-24 00:00", "client_order_id": "O-000055", "instrument": "IEF.SIM", "ticker": "IEF", "side": "BUY", "quantity": 164, "price": 93.03, "notional": 15256.92, "cost": 15.26, "status": "SIMULATED"}], "pm_opinion": "2026-08-24 기준, 주목도(확신도×견해크기) 1위는 XLK로 5일 견해 +5.14%에 확신도 0.34, 경로의 100%가 상승을 가리켰습니다. 확신도 자체가 가장 높은 종목은 IEF(0.85)입니다. 배분 결과는 IEF 40.0%, TLT 25.1%, XLE 15.9%, XLF 15.2% 입니다. 확신도가 가장 낮은 SLV(0.15)는 비중이 0.0%로 억제돼 있어, Black-Litterman의 되돌림이 의도대로 작동한 것으로 보입니다. 주문은 매수 1건, 매도 2건이 모의 생성됐고 실제로 전송된 것은 없습니다. 이 모델의 예측력은 독립 검증에서 무작위 걷기와 구분되지 않은 바 있으므로, 위 해석은 전부 잠정적입니다.", "pm_source": "rules:PM_LLM_MODE=never", "history": [{"cycle_no": 1, "as_of": "2025-08-21", "equity": 999001.02, "start_equity": 1000000.0, "period_return_pct": 0.0, "n_orders": 4, "weights": {"SPY": 0.100045, "IWM": 0.099846, "GLD": 0.400184, "TLT": 0.399901}, "top_pick": "TLT", "benchmark_close": 628.5850830078125, "turnover": 0.0, "turnover_gross": 0.9999761451184768, "costs_paid": 998.9771917572023, "cash_weight": 2.385488152326467e-05}, {"cycle_no": 2, "as_of": "2025-09-19", "equity": 1066620.97, "start_equity": 1000000.0, "period_return_pct": 6.772, "n_orders": 3, "weights": {"SPY": 0.098124, "IWM": 0.101746, "GLD": 0.39972, "TLT": 0.399986}, "top_pick": "XLE", "benchmark_close": 658.2465209960938, "turnover": 0.013980375271175793, "turnover_gross": 0.02755820939056998, "costs_paid": 1028.366283843994, "cash_weight": 0.00042488310373401}, {"cycle_no": 3, "as_of": "2025-10-17", "equity": 1141238.06, "start_equity": 1000000.0, "period_return_pct": 7.02, "n_orders": 4, "weights": {"SPY": 0.091804, "IWM": 0.034718, "GLD": 0.37323, "TLT": 0.400024, "XLF": 0.10001}, "top_pick": "IEF", "benchmark_close": 658.9308471679688, "turnover": 0.11564032395194175, "turnover_gross": 0.23146314644232707, "costs_paid": 1292.5334026794433, "cash_weight": 0.00021451271353035113}, {"cycle_no": 4, "as_of": "2025-11-14", "equity": 1117650.02, "start_equity": 1000000.0, "period_return_pct": -2.06, "n_orders": 4, "weights": {"SPY": 0.094209, "GLD": 0.368341, "TLT": 0.400007, "XLF": 0.136866}, "top_pick": "GLD", "benchmark_close": 666.4088134765625, "turnover": 0.03517379558430479, "turnover_gross": 0.0699892117204545, "costs_paid": 1370.6989248580933, "cash_weight": 0.0005774041406598101}, {"cycle_no": 5, "as_of": "2025-12-15", "equity": 1142304.98, "start_equity": 1000000.0, "period_return_pct": 2.209, "n_orders": 3, "weights": {"SPY": 0.092792, "GLD": 0.365896, "TLT": 0.400006, "XLF": 0.140397}, "top_pick": "XLK", "benchmark_close": 675.1365966796875, "turnover": 0.014091073088778036, "turnover_gross": 0.027837614345660247, "costs_paid": 1402.4962573013306, "cash_weight": 0.0009094578339022033}, {"cycle_no": 6, "as_of": "2026-01-14", "equity": 1180632.04, "start_equity": 1000000.0, "period_return_pct": 3.362, "n_orders": 3, "weights": {"SPY": 0.091319, "GLD": 0.347785, "TLT": 0.40002, "XLF": 0.160832}, "top_pick": "XLE", "benchmark_close": 686.7105712890625, "turnover": 0.03316552212669227, "turnover_gross": 0.06716701876859643, "costs_paid": 1481.776985080719, "cash_weight": 4.390034860919302e-05}, {"cycle_no": 7, "as_of": "2026-02-12", "equity": 1201516.74, "start_equity": 1000000.0, "period_return_pct": 1.789, "n_orders": 3, "weights": {"SPY": 0.186688, "GLD": 0.261851, "TLT": 0.400043, "XLF": 0.150857}, "top_pick": "XLK", "benchmark_close": 677.668701171875, "turnover": 0.10023511432397747, "turnover_gross": 0.19995260440067927, "costs_paid": 1721.9571488990784, "cash_weight": 0.0005607529011669361}, {"cycle_no": 8, "as_of": "2026-03-13", "equity": 1178944.02, "start_equity": 1000000.0, "period_return_pct": -1.866, "n_orders": 4, "weights": {"SPY": 0.184403, "GLD": 0.208736, "TLT": 0.400038, "XLF": 0.206265}, "top_pick": "SPY", "benchmark_close": 658.7890014648438, "turnover": 0.06421548124946425, "turnover_gross": 0.1284447188492227, "costs_paid": 1873.373453891754, "cash_weight": 0.0005576596512429844}, {"cycle_no": 9, "as_of": "2026-04-13", "equity": 1191791.91, "start_equity": 1000000.0, "period_return_pct": 1.099, "n_orders": 4, "weights": {"SPY": 0.178005, "GLD": 0.161097, "TLT": 0.399991, "XLF": 0.26064}, "top_pick": "QQQ", "benchmark_close": 684.3369750976562, "turnover": 0.04542191117473285, "turnover_gross": 0.09112782727593818, "costs_paid": 1981.9538444480895, "cash_weight": 0.0002675927219180796}, {"cycle_no": 10, "as_of": "2026-05-11", "equity": 1199758.26, "start_equity": 1000000.0, "period_return_pct": 0.709, "n_orders": 5, "weights": {"SPY": 0.189919, "GLD": 0.059414, "TLT": 0.393332, "XLF": 0.156691, "IEF": 0.100036, "XLE": 0.100014}, "top_pick": "IWM", "benchmark_close": 737.4002685546875, "turnover": 0.20053615537464253, "turnover_gross": 0.4007427764177758, "costs_paid": 2462.8509164390557, "cash_weight": 0.0005952437450879397}, {"cycle_no": 11, "as_of": "2026-06-09", "equity": 1195352.9, "start_equity": 1000000.0, "period_return_pct": -0.333, "n_orders": 6, "weights": {"SPY": 0.089792, "GLD": 0.051653, "TLT": 0.344338, "XLF": 0.14209, "IEF": 0.199808, "XLE": 0.172031}, "top_pick": "QQQ", "benchmark_close": 735.1560668945312, "turnover": 0.1710046142611054, "turnover_gross": 0.3423177047728527, "costs_paid": 2872.286362846374, "cash_weight": 0.00028875664374329363}, {"cycle_no": 12, "as_of": "2026-07-09", "equity": 1197420.59, "start_equity": 1000000.0, "period_return_pct": 0.193, "n_orders": 4, "weights": {"SPY": 0.060894, "GLD": 0.049901, "TLT": 0.274291, "XLF": 0.149353, "IEF": 0.299958, "XLE": 0.165226}, "top_pick": "SLV", "benchmark_close": 751.7100219726562, "turnover": 0.10015755739722904, "turnover_gross": 0.2002265946058631, "costs_paid": 3112.082498825072, "cash_weight": 0.00037672049497853395}, {"cycle_no": 13, "as_of": "2026-08-06", "equity": 1211936.23, "start_equity": 1000000.0, "period_return_pct": 1.232, "n_orders": 5, "weights": {"GLD": 0.037619, "TLT": 0.255471, "XLF": 0.153596, "IEF": 0.394828, "XLE": 0.158413}, "top_pick": "XLK", "benchmark_close": 768.5599975585938, "turnover": 0.09964819210625962, "turnover_gross": 0.19959519343669477, "costs_paid": 3354.0039846115105, "cash_weight": 7.332491852868626e-05}, {"cycle_no": 14, "as_of": "2026-08-24", "equity": 1235629.26, "start_equity": 1000000.0, "period_return_pct": 1.958, "n_orders": 3, "weights": {"GLD": 0.037757, "TLT": 0.25076, "XLF": 0.151967, "IEF": 0.399938, "XLE": 0.15922}, "top_pick": "XLK", "benchmark_close": 762.6400146484375, "turnover": 0.012653134012484211, "turnover_gross": 0.025020385989680892, "costs_paid": 3384.8979795646665, "cash_weight": 0.0003578031047065283}]}</script>
+  <div style="max-width:1180px;margin:18px auto 0;padding:12px 16px;border:1px solid #d8a13a;border-radius:10px;background:#2a2113;color:#e8c377;font-size:13px;line-height:1.7"><b>공개 데모 · 전 구간 모의투자</b><br>실제 시장 데이터로 파이프라인을 돌린 결과지만 브로커에 전송된 주문은 하나도 없습니다. 누군가의 실계좌가 아닙니다.<br><b>여기 보이는 성과를 그대로 믿지 마세요.</b> 표본이 사이클 수십 개뿐이고, 슬리피지가 반영되지 않았으며(종가 전량 체결 가정), 이 구간은 상승장이었습니다. 다른 구간에서는 같은 설정으로 SPY 에 뒤졌습니다. 이 모델의 예측력은 검증되지 않았습니다 — 원저자의 독립 평가에서 무작위 걷기와 구분되지 않았습니다.<br>투자 조언이 아닙니다. 직접 돌려보려면 <a href="https://github.com/NJ1099/fund-manager-agent" style="color:#f0d19a">GitHub 저장소</a>를 참고하세요.</div><div id="root"><div class="loading">에이전트 상태를 불러오는 중…</div></div>
+</div>
+
+<script>
+const COLORS={SPY:'#6d8fd4',QQQ:'#a479c9',IWM:'#c98b6a',TLT:'#3fb0a0',IEF:'#4d9e91',
+  GLD:'#d4a24c',SLV:'#9aa6b4',XLE:'#cf7355',XLF:'#5b9bd4',XLK:'#8a7fd0'};
+const c=t=>COLORS[t]||'#7b8794';
+const usd=v=>'$'+Math.round(v).toLocaleString('en-US');
+const pct=v=>(v>=0?'+':'')+v.toFixed(2)+'%';
+let polling=null;
+
+async function load(){
+  try{
+    const r=await fetch('/api/state',{cache:'no-store'});
+    if(!r.ok){
+      const e=await r.json().catch(()=>({error:'상태를 읽을 수 없습니다'}));
+      document.getElementById('root').innerHTML=
+        `<div class="loading">${e.error||'상태 없음'}</div>`;
+      return;
+    }
+    render(await r.json());
+  }catch(err){
+    document.getElementById('root').innerHTML=
+      `<div class="loading">서버에 연결할 수 없습니다. <code>python server.py</code> 가 실행 중인지 확인하세요.</div>`;
+  }
+}
+
+function fanSVG(f,last){
+  const all=[...f.p05,...f.p50,...f.p95,last];
+  const lo=Math.min(...all),hi=Math.max(...all),rng=(hi-lo)||1;
+  const n=f.p50.length, W=100, H=48;
+  const X=i=>(i/(n-1||1))*W, Y=v=>H-((v-lo)/rng)*H;
+  const up=f.p05.map((v,i)=>`${X(i)},${Y(v)}`).join(' ');
+  const dn=f.p95.map((v,i)=>`${X(i)},${Y(v)}`).reverse().join(' ');
+  const mid=f.p50.map((v,i)=>`${X(i)},${Y(v)}`).join(' ');
+  const rising=f.p50[n-1]>=last;
+  const col=rising?'#4fbf7a':'#e0706c';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <polygon points="${up} ${dn}" fill="${col}" opacity=".14"/>
+    <polyline points="${mid}" fill="none" stroke="${col}" stroke-width="1.6"/>
+    <line x1="0" y1="${Y(last)}" x2="${W}" y2="${Y(last)}" stroke="#59636f"
+      stroke-width=".8" stroke-dasharray="2,2"/>
+  </svg>`;
+}
+
+function curveSVG(curve){
+  const pts=curve.filter(p=>p.strategy!=null);
+  if(pts.length<2) return `<div class="empty">사이클이 2회 이상 쌓이면 자산 곡선이 그려집니다
+    (현재 ${pts.length}회)</div>`;
+  const bm=pts.filter(p=>p.benchmark!=null);
+  const vals=[...pts.map(p=>p.strategy),...bm.map(p=>p.benchmark)];
+  let lo=Math.min(...vals),hi=Math.max(...vals);
+  const pad=(hi-lo)*0.12||1; lo-=pad; hi+=pad;
+  const W=100,H=52,rng=hi-lo;
+  const X=(i,n)=>(i/((n-1)||1))*W, Y=v=>H-((v-lo)/rng)*H;
+  const path=(arr,key)=>arr.map((p,i)=>`${X(i,arr.length)},${Y(p[key])}`).join(' ');
+  const base=Y(100);
+  const last=pts[pts.length-1].strategy;
+  const col=last>=100?'#4fbf7a':'#e0706c';
+  // 기준선(100)과 두 곡선. 벤치마크는 점선으로 겹쳐 그린다.
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="#59636f" stroke-width=".5"
+      stroke-dasharray="1.5,1.5" vector-effect="non-scaling-stroke"/>
+    ${bm.length>1?`<polyline points="${path(bm,'benchmark')}" fill="none" stroke="#8b96a5"
+      stroke-width="1.2" stroke-dasharray="3,2" vector-effect="non-scaling-stroke"/>`:''}
+    <polyline points="${path(pts,'strategy')}" fill="none" stroke="${col}"
+      stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+  </svg>
+  <div class="legend">
+    <span><i style="background:${col}"></i>전략 (${last.toFixed(1)})</span>
+    ${bm.length>1?`<span><i style="background:#8b96a5"></i>SPY 매수 후 보유
+      (${bm[bm.length-1].benchmark.toFixed(1)})</span>`:''}
+    <span style="color:var(--dim)">시작 = 100 · ${pts.length}개 사이클</span>
+  </div>`;
+}
+
+function metricsHTML(pf){
+  const n=v=>v==null?'—':v;
+  const items=[
+    ['샤프',n(pf.sharpe),pf.annualized?'연율화':'사이클 부족'],
+    ['최대 낙폭',pf.max_drawdown_pct==null?'—':'-'+pf.max_drawdown_pct.toFixed(2)+'%',
+      pf.benchmark_max_drawdown_pct==null?'':'SPY -'+pf.benchmark_max_drawdown_pct.toFixed(2)+'%'],
+    ['변동성',pf.volatility_annual_pct==null?'—':pf.volatility_annual_pct.toFixed(1)+'%','연율화'],
+    ['승률',pf.win_rate_pct==null?'—':pf.win_rate_pct.toFixed(0)+'%','플러스 사이클 비율'],
+    ['평균 회전율',pf.avg_turnover_pct==null?'—':pf.avg_turnover_pct.toFixed(1)+'%','사이클당'],
+    ['누적 거래비용',pf.total_costs==null?'—':usd(pf.total_costs),
+      pf.cost_drag_pct==null?'':'원금의 '+pf.cost_drag_pct.toFixed(2)+'%'],
+  ];
+  return items.map(([k,v,note])=>
+    `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div>
+     <div class="n">${note||''}</div></div>`).join('');
+}
+
+function riskGateHTML(meta){
+  const rg=meta.risk_gate||{}, tg=meta.turnover_gate||{};
+  const msgs=[];
+  if(rg.triggered) msgs.push(`<b>리스크 게이트 발동</b> — ${rg.reason}.
+    목표 노출을 ${(rg.exposure*100).toFixed(0)}%로 줄이고 나머지는 현금으로 두었습니다.`);
+  if(tg.scaled) msgs.push(`<b>회전율 게이트 발동</b> — 기존 포지션의
+    ${(tg.sell_turnover*100).toFixed(0)}%를 교체해야 해 한도 ${(tg.limit*100).toFixed(0)}%를
+    넘었습니다. 목표의 ${(tg.scale*100).toFixed(0)}%만 반영해 단계적으로 이동합니다.`);
+  if(!msgs.length) return `<div class="gate" style="border-color:var(--line);
+    background:var(--panel);color:var(--dim)">리스크·회전율 게이트 모두 정상 범위입니다
+    (낙폭 ${(rg.drawdown_pct??0).toFixed(2)}%).</div>`;
+  return `<div class="gate">${msgs.join('<br><br>')}</div>`;
+}
+
+function render(s){
+  const m=s.meta, p=s.portfolio, wl=s.watchlist, notes=s.watch_notes||{};
+  const isRules=(s.pm_source||'').startsWith('rules');
+  document.getElementById('pmSrc').textContent =
+    isRules ? 'PM: 룰 기반 (무료)' : 'PM: '+s.pm_source.replace('llm:','');
+  // LLM 을 쓸 수 있고 지금 논평이 룰 기반일 때만 유료 버튼을 노출한다.
+  // 호출 주체는 서버이므로 서버가 알려준 값(_llm_available)을 우선한다 —
+  // 스냅샷처럼 서버가 없는 문맥에서는 사이클 당시 값으로 폴백한다.
+  const llmAvail = (s._llm_available!==undefined) ? s._llm_available : m.pm_llm_available;
+  document.getElementById('pmBtn').style.display =
+    (llmAvail && isRules) ? '' : 'none';
+  const gen=new Date(s.generated_at);
+  const mins=Math.round((Date.now()-gen)/60000);
+  document.getElementById('freshness').textContent =
+    mins<1?'방금 갱신':(mins<60?`${mins}분 전`:`${Math.round(mins/60)}시간 전`);
+
+  const held=Object.entries(p.weights).filter(([,w])=>w>1e-6);
+  const pf=s.performance||{};
+  const cashPct=(p.cash_weight!=null?p.cash_weight*100:0);
+  const ex=pf.excess_return_pct;
+  const stats=[
+    ['평가자산',usd(p.equity),''],
+    ['직전 사이클',pct(p.period_return_pct),p.period_return_pct>=0?'pos':'neg'],
+    ['누적 수익',pf.cum_return_pct==null?'—':pct(pf.cum_return_pct),
+      pf.cum_return_pct==null?'':(pf.cum_return_pct>=0?'pos':'neg')],
+    ['SPY 대비',ex==null?'—':pct(ex),ex==null?'':(ex>=0?'pos':'neg')],
+    ['현금',cashPct.toFixed(1)+'%',''],
+    ['보유 · 주문',held.length+'종목 · '+s.orders.length+'건',''],
+  ];
+
+  const rows=wl.map(w=>{
+    const wt=p.weights[w.ticker]||0, isHeld=wt>1e-6;
+    return `<div class="row ${isHeld?'held':'watch'}">
+      <div class="rank">${w.rank}</div>
+      <div class="tk" style="color:${c(w.ticker)}">${w.ticker}
+        <small>$${w.last_close.toFixed(2)}</small></div>
+      <div class="note-cell">${notes[w.ticker]||''}</div>
+      <div class="view" style="color:${w.view_horizon_pct>=0?'var(--pos)':'var(--neg)'}">
+        ${pct(w.view_horizon_pct)}<br><span class="dir ${w.direction}">${w.direction}</span></div>
+      <div class="conf">
+        <div class="lbl"><span>확신도</span><span>${(w.confidence*100).toFixed(0)}%</span></div>
+        <div class="track"><div class="fill" style="width:${w.confidence*100}%;background:${c(w.ticker)}"></div></div>
+        <div class="lbl"><span>상승경로</span><span>${(w.up_path_ratio*100).toFixed(0)}%</span></div>
+      </div>
+      <div class="wt">${isHeld
+        ? `<span class="big" style="color:${c(w.ticker)}">${(wt*100).toFixed(1)}%</span>`
+        : `<span class="zero">—</span>`}
+        <br><span style="font-size:9.5px;color:var(--dim)">${isHeld?'보유':'미편입'}</span></div>
+    </div>`;
+  }).join('');
+
+  const fans=wl.slice(0,8).map(w=>`
+    <div class="fan">
+      <div class="ft"><span class="fn" style="color:${c(w.ticker)}">${w.ticker}</span>
+        <span class="fv" style="color:${w.view_horizon_pct>=0?'var(--pos)':'var(--neg)'}">${pct(w.view_horizon_pct)}</span></div>
+      ${fanSVG(w.fan,w.last_close)}
+    </div>`).join('');
+
+  const orders=s.orders.length? s.orders.map(o=>`
+    <div class="o-row">
+      <div class="side ${o.side}">${o.side}</div>
+      <div class="o-tk" style="color:${c(o.ticker)}">${o.ticker}</div>
+      <div class="o-qty">${o.quantity.toLocaleString()}주 @ $${o.price.toFixed(2)}${
+        o.cost!=null?` <span style="color:var(--dim)">· 비용 $${o.cost.toFixed(0)}</span>`:''}</div>
+      <div class="o-not">${usd(o.notional)}</div>
+      <div class="o-stat">${o.status}</div>
+    </div>`).join('')
+    : '<div class="empty">이번 사이클은 회전율 제약 안에서 조정할 것이 없었습니다</div>';
+
+  const bl=p.meta.bl_shift_bp||{};
+  const blRows=Object.entries(bl).map(([t,v])=>
+    `<span style="color:${c(t)}">${t}</span> ${v>=0?'+':''}${v}bp`).join(' · ');
+
+  document.getElementById('root').innerHTML=`
+    <div class="stats">${stats.map(([k,v,cl])=>
+      `<div class="stat"><div class="k">${k}</div><div class="v ${cl}">${v}</div></div>`).join('')}</div>
+
+    <section>
+      <div class="head"><div class="title">에이전트 의견</div>
+        <div class="note">읽고 논평만 — 주문 경로에 관여하지 않음</div></div>
+      <div class="panel opinion">
+        <div class="who">◆ PM · 감독 데스크 · ${s.as_of}</div>
+        <p>${s.pm_opinion}</p>
+        <div class="foot">
+          출처: ${isRules
+            ? '결정론적 룰 기반 — 비용 0 · 사유: ' + (s.pm_source.split(':')[1]||'')
+            : s.pm_source + ' (유료 호출)'}<br>
+          LLM 정책: <b>${s._llm_mode||m.pm_llm_mode||'once'}</b> ·
+          ${llmAvail?`지금까지 실제 호출 <b>${s.llm_calls||0}</b>회`:'API 키 없음 — 항상 무료'}
+          · 대시보드 새로고침·폴링은 저장된 파일만 읽으므로 비용이 발생하지 않습니다.${
+            llmAvail&&isRules?' 이 사이클에 대한 LLM 논평이 필요하면 상단 <b>PM 논평 받기 ($)</b> 버튼을 누르세요 — 시장 데이터를 다시 부르거나 주문을 만들지 않고 논평만 새로 씁니다.':''}<br>
+          이 논평은 어떤 비중도 바꾸지 않았고 어떤 주문도 만들지 않았습니다.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><div class="title">성과 추이</div>
+        <div class="note">사이클 #${s.cycle_no} · 기준일 ${s.as_of} ·
+          거래비용 ${m.tx_cost_bps}bp 차감 후 · 슬리피지는 모델링하지 않음</div></div>
+      <div class="perf">
+        <div class="panel">${curveSVG(s.equity_curve||[])}</div>
+        <div>
+          <div class="metrics">${metricsHTML(pf)}</div>
+          ${riskGateHTML(p.meta)}
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="head"><div class="title">주목 종목</div>
+        <div class="note">Kronos가 워치리스트 ${m.watchlist_size}종목을 스캔 · 주목도 = 확신도 × 견해 크기(절댓값)<br>
+          하락 견해가 강한 종목도 상위에 오릅니다 — 편입 대상이 아니므로 AVOID 로 표시됩니다</div></div>
+      <div class="board">${rows}</div>
+    </section>
+
+    <section>
+      <div class="head"><div class="title">예측 경로</div>
+        <div class="note">${m.sample_count}개 경로의 5·50·95 분위 · 향후 ${m.pred_len}거래일 · 점선은 현재가</div></div>
+      <div class="panel"><div class="fan-wrap">${fans}</div></div>
+    </section>
+
+    <section class="cols">
+      <div>
+        <div class="head"><div class="title">주문 (모의)</div>
+          <div class="note">NautilusTrader MarketOrder · 전송 안 됨</div></div>
+        <div class="panel"><div class="blotter">${orders}</div></div>
+      </div>
+      <div>
+        <div class="head"><div class="title">진단</div>
+          <div class="note">이번 사이클이 어떻게 나왔나</div></div>
+        <div class="panel"><div class="diag">
+          ${(p.degraded&&p.degraded.length)
+            ? `<span class="warn">⚠ 데이터 결손: ${p.degraded.join(', ')} 의 가격을 받지 못해
+               주문을 만들지 못했고 장부를 정규화했습니다. 이 사이클의 비중은 의도된 결과가 아닙니다.</span><br>`
+            : ''}
+          최적화: <b>${p.meta.fallback_used
+            ? '<span class="warn">실패 → 동일가중 후퇴</span>'
+            : 'CVaR ' + (p.meta.constraints.cvar_beta*100) + '% 정상 해'}</b><br>
+          ${p.meta.fallback_used?`<span class="warn">사유: ${p.meta.fallback_reason||'-'}</span><br>`:''}
+          제약: 단일 상한 <b>${(m.max_weight*100).toFixed(0)}%</b> ·
+            회전율 <b>${p.meta.constraints.max_turnover!=null?(m.max_turnover*100).toFixed(0)+'%':'미적용(최초 편입)'}</b> ·
+            비용 <b>${m.tx_cost_bps}bp</b><br>
+          장부: 현금 <b>${usd(p.cash||0)}</b> (${((p.cash_weight||0)*100).toFixed(1)}%) ·
+            실현 회전율 <b>${((p.turnover||0)*100).toFixed(1)}%</b> ·
+            누적 비용 <b>${usd(p.costs_paid||0)}</b><br>
+          보유 주식: ${Object.entries(p.positions||{}).map(([t,q])=>
+            `<span style="color:${c(t)}">${t}</span> ${q.toLocaleString()}주`).join(' · ')||'없음'}<br>
+          BL 사후 이동: ${blRows||'-'}<br>
+          <span style="color:var(--dim)">사후 이동이 클수록 견해가 많이 반영된 것이고, 0에 가까우면
+          모델이 확신을 못 줘서 시장 균형 쪽으로 되돌아간 것입니다.</span><br><br>
+          연구: <b>${m.kronos_model}</b> · lookback <b>${m.lookback}</b>일 · 경로 <b>${m.sample_count}</b>개<br>
+          skfolio <b>v${m.versions.skfolio}</b> · nautilus_trader <b>v${m.versions.nautilus_trader}</b><br>
+          사이클 소요 <b>${s.elapsed_sec}s</b>
+        </div></div>
+      </div>
+    </section>
+
+    <footer>
+      <p>전 구간 모의투자입니다. 브로커 커넥터가 연결돼 있지 않고, 실거래 주문 전송 경로가 코드에 존재하지 않습니다.</p>
+      <p>Kronos의 예측력은 원문 저자의 독립 검증에서 무작위 걷기 베이스라인과 통계적으로 구분되지 않았습니다(Brier 0.189 vs 0.188). 위 견해와 확신도는 그 한계를 그대로 물려받습니다.</p>
+      <p>확신도는 워치리스트 안에서의 상대 순위이지, 절대적 예측 신뢰도가 아닙니다. 투자 조언이 아니며, 투자 판단과 그 결과는 본인 책임입니다.</p>
+    </footer>`;
+}
+
+document.getElementById('refreshBtn').onclick=load;
+document.getElementById('pmBtn').onclick=async function(){
+  const label=this.textContent;
+  this.disabled=true; this.textContent='LLM 호출 중…';
+  try{
+    const r=await fetch('/api/pm-opinion',{method:'POST'});
+    const j=await r.json().catch(()=>({ok:false,message:'응답을 읽을 수 없습니다'}));
+    await load();
+    if(!j.ok){
+      // 실패 사유를 버튼 자리에 잠깐 띄운다 (다이얼로그를 띄우지 않는다)
+      this.textContent='실패 — '+(j.message||'').slice(0,24);
+      setTimeout(()=>{this.textContent=label; this.disabled=false;},4000);
+      return;
+    }
+  }catch(e){
+    this.textContent='서버 연결 실패';
+    setTimeout(()=>{this.textContent=label; this.disabled=false;},4000);
+    return;
+  }
+  this.disabled=false; this.textContent=label;
+};
+document.getElementById('runBtn').onclick=async function(){
+  this.disabled=true; this.textContent='실행 중…';
+  try{
+    await fetch('/api/run-cycle',{method:'POST'});
+    const t=setInterval(async()=>{
+      const r=await fetch('/api/state',{cache:'no-store'});
+      if(r.ok){const s=await r.json(); if(!s._running){clearInterval(t);
+        document.getElementById('runBtn').disabled=false;
+        document.getElementById('runBtn').textContent='사이클 실행'; render(s);}}
+    },3000);
+  }catch(e){
+    this.disabled=false; this.textContent='사이클 실행';
+  }
+};
+
+
+// ---- 스냅샷 모드: 서버 없이 임베드된 상태를 그대로 렌더한다 ----
+const SNAPSHOT = JSON.parse(document.getElementById('snapshot-state').textContent);
+// 스냅샷에는 서버가 없다. 서버를 부르는 버튼은 전부 감춘다 —
+// 남겨두면 눌렀을 때 조용히 실패한다. 특히 'PM 논평 받기 ($)' 는
+// render() 가 상태를 보고 다시 켜므로 render 뒤에 숨겨야 한다.
+SNAPSHOT._llm_available = false;
+async function load(){
+  render(SNAPSHOT);
+  for (const id of ['runBtn','refreshBtn','pmBtn']) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+}
+
+load();
+</script>
+</body>
+</html>
