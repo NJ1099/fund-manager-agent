@@ -12,7 +12,7 @@
 ### ~~1. 백테스트 하네스~~ ✅ 2026-08-24 완료
 
 `core/backtest.py` + `core/cycle.py` + `core/infer_cache.py` + `core/sweep.py` +
-`scripts/backtest.py`. 사용법은 README 의 '백테스트' 절 참고.
+`scripts/backtest.py`. 상세는 README '백테스트' 절과 HANDOFF 라운드 4.
 
 핵심은 **전략 로직을 복제하지 않은 것**이다. 선별·최적화·게이트를 `core/cycle.py::plan`
 하나로 뽑아 라이브와 백테스트가 같은 함수를 부른다. 복제했다면 백테스트는 실제로
