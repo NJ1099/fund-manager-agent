@@ -219,6 +219,62 @@ footer p{margin:0 0 6px}
   color:#7fb2f0;display:flex;align-items:center;justify-content:center;font-size:12px;
   font-weight:600;font-family:var(--mono,monospace)}
 .step .t{flex:1;color:#b9c2ce}
+
+/* ---- 좁은 화면 (폰) ----
+   표를 그대로 두면 9칸이 화면을 넘어 옆으로 잘린다. 종목마다 카드 한 장으로 바꾼다.
+   각 칸의 라벨은 렌더 시 심어둔 data-label 을 쓴다. */
+@media(max-width:720px){
+  .wrap{padding:16px 12px 60px}
+  .brand h1{font-size:18px}
+  .tabs{gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs button{flex:1 0 auto;padding:12px 14px;font-size:13px;white-space:nowrap}
+
+  .hold-head{align-items:flex-start}
+  .hold-actions{width:100%}
+  .hold-actions button{flex:1 1 auto;padding:10px 12px;font-size:12px}
+
+  .hsearch input{font-size:16px;padding:12px}   /* 16px 미만이면 iOS 가 화면을 확대한다 */
+  .sug div{padding:12px;flex-direction:column;gap:3px;align-items:flex-start}
+
+  .hform{flex-direction:column;align-items:stretch;gap:10px}
+  .hform label{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .hform input{width:150px;font-size:16px;padding:10px}
+  .hform button{padding:12px;font-size:13px}
+  #addTicker{font-size:13px;word-break:break-all}
+
+  .htable{display:block}
+  .htable thead{display:none}
+  .htable tbody,.htable tr,.htable td{display:block;width:100%}
+  .htable tr{border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+    margin-bottom:10px;position:relative;background:rgba(255,255,255,.02)}
+  .htable tr:hover td{background:none}
+  .htable td{text-align:right;padding:6px 0;border:none;
+    display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .htable td::before{content:attr(data-label);color:var(--dim);font-size:11px;
+    font-family:var(--disp,inherit);text-align:left;flex:0 0 auto}
+  .htable td:first-child{display:block;text-align:left;padding:0 34px 8px 0;
+    border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:6px}
+  .htable td:first-child::before{content:none}
+  .htable .nm{font-size:12px;margin-top:2px}
+  .htable .delcell{position:absolute;top:8px;right:8px;left:auto;bottom:auto;
+    width:auto;padding:0;display:block}
+  .htable .delcell::before{content:none}
+  .htable .del{display:flex;align-items:center;justify-content:center;
+    width:32px;height:32px;font-size:15px}
+
+  .hdiag{grid-template-columns:repeat(2,1fr);gap:8px}
+  .hdiag .metric{padding:10px}
+  .hnote{font-size:13px;padding:12px}
+  .doc{font-size:14px}
+  .doc table{display:block;overflow-x:auto;white-space:normal}
+  .doc td,.doc th{min-width:88px}
+}
+
+@media(max-width:400px){
+  .hdiag{grid-template-columns:1fr}
+  .hform input{width:100%}
+  .hform label{flex-direction:column;align-items:stretch;gap:4px}
+}
 </style>
 </head>
 <body>
@@ -756,9 +812,23 @@ function holdMsg(text,kind){
 }
 
 async function api(url,opts){
-  const r=await fetch(url,opts);
+  let r;
+  try{
+    r=await fetch(url,opts);
+  }catch(e){
+    throw new Error('네트워크에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
   let j={}; try{ j=await r.json(); }catch(e){}
-  if(!r.ok) throw new Error(j.error||j.message||('HTTP '+r.status));
+  if(!r.ok){
+    // 상태 코드만 던지면 사용자는 뭘 해야 할지 알 수 없다.
+    if(j.error||j.message) throw new Error(j.error||j.message);
+    if(r.status===404) throw new Error(
+      '시세 서비스를 찾을 수 없습니다. 이 페이지를 파일로 직접 열었거나 '+
+      '중계 기능이 없는 곳에 올려두면 이렇게 됩니다.');
+    if(r.status===429) throw new Error('요청이 몰렸습니다. 잠시 후 다시 시도해 주세요.');
+    if(r.status>=500) throw new Error('시세 서비스가 일시적으로 응답하지 않습니다.');
+    throw new Error('요청이 실패했습니다 (HTTP '+r.status+')');
+  }
   return j;
 }
 
@@ -1167,14 +1237,14 @@ function renderHoldings(){
     html+=`<tr><td><span class="tk">${h.ticker}</span>`+
       (h.name?`<div class="nm">${h.name}</div>`:'')+
       `</td>`+
-      `<td>${fmtNum(h.quantity,h.quantity%1?4:0)}</td>`+
-      `<td>${money(h.avg_cost,h.currency)}</td>`+
-      `<td>${money(v.price,h.currency)}</td>`+
-      `<td>${money(v.market_value,h.currency)}</td>`+
-      `<td>${v.weight==null?'—':(v.weight*100).toFixed(1)+'%'}</td>`+
-      `<td ${pnlCls}>${signPct(v.pnl_pct)}</td>`+
-      (showViews?`<td>${viewCell}</td>`:'')+
-      `<td><span class="del" data-del="${h.ticker}" title="삭제">✕</span></td></tr>`;
+      `<td data-label="수량">${fmtNum(h.quantity,h.quantity%1?4:0)}</td>`+
+      `<td data-label="평단">${money(h.avg_cost,h.currency)}</td>`+
+      `<td data-label="현재가">${money(v.price,h.currency)}</td>`+
+      `<td data-label="평가액">${money(v.market_value,h.currency)}</td>`+
+      `<td data-label="비중">${v.weight==null?'—':(v.weight*100).toFixed(1)+'%'}</td>`+
+      `<td data-label="손익" ${pnlCls}>${signPct(v.pnl_pct)}</td>`+
+      (showViews?`<td data-label="모델 견해">${viewCell}</td>`:'')+
+      `<td class="delcell"><span class="del" data-del="${h.ticker}" title="삭제">✕</span></td></tr>`;
   });
   html+='</tbody></table>';
 
