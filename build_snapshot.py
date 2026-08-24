@@ -25,6 +25,10 @@ async function load(){
     if (el) el.style.display = 'none';
   }
 }
+// '내 보유' 섹션은 서버 API(/api/holdings 등)로 살아 움직인다. 스냅샷에는 서버가
+// 없으므로 이 플래그로 초기화 자체를 막는다 — 감추기만 하면 요청은 그대로 나가서
+// 콘솔에 404 가 쌓인다. 무엇보다 공개 스냅샷에 개인 보유 정보가 실릴 이유가 없다.
+window.__SNAPSHOT__ = true;
 """
 
 # 대시보드에서 찾아 바꿀 앵커들. dashboard.html 을 고치다 이 문자열이 어긋나면

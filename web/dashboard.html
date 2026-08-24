@@ -143,6 +143,49 @@ footer{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);
   font-size:10.5px;color:var(--dim);line-height:1.85}
 footer p{margin:0 0 6px}
 .loading{text-align:center;padding:70px 20px;color:var(--dim);font-size:13px}
+
+/* ---- 내 보유 종목 (사용자 실계좌) ---- */
+.hold-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hold-actions{display:flex;gap:6px;flex-wrap:wrap}
+.hold-actions button{font-size:11px;padding:6px 10px}
+.hsearch{position:relative;margin:12px 0}
+.hsearch input{width:100%;box-sizing:border-box;background:var(--panel2,#161a21);
+  border:1px solid var(--line);border-radius:8px;color:var(--fg,#e6e9ef);
+  padding:10px 12px;font-family:inherit;font-size:13px}
+.hsearch input:focus{outline:none;border-color:#4d7fd4}
+.sug{position:absolute;z-index:30;left:0;right:0;top:100%;margin-top:4px;
+  background:#141821;border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  max-height:320px;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.sug div{padding:9px 12px;cursor:pointer;font-size:12px;display:flex;
+  justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.04)}
+.sug div:hover{background:rgba(255,255,255,.06)}
+.sug .sym{font-family:var(--mono,monospace);color:#7fb2f0}
+.sug .ex{color:var(--dim);font-size:11px}
+.hform{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 4px;
+  padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.02)}
+.hform input{background:#11151c;border:1px solid var(--line);border-radius:6px;
+  color:var(--fg,#e6e9ef);padding:7px 9px;font-family:var(--mono,monospace);font-size:12px;width:110px}
+.hform label{font-size:11px;color:var(--dim)}
+.htable{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.htable th{text-align:right;color:var(--dim);font-weight:500;font-size:11px;
+  padding:6px 8px;border-bottom:1px solid var(--line)}
+.htable th:first-child,.htable td:first-child{text-align:left}
+.htable td{padding:8px;border-bottom:1px solid rgba(255,255,255,.04);text-align:right;
+  font-family:var(--mono,monospace)}
+.htable tr:hover td{background:rgba(255,255,255,.02)}
+.htable .nm{font-family:inherit;color:var(--dim);font-size:11px}
+.htable .del{cursor:pointer;color:#8b96a5;padding:2px 6px;border-radius:4px}
+.htable .del:hover{color:#e06c6c;background:rgba(224,108,108,.1)}
+.hsrc{font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,.06);
+  color:var(--dim);margin-left:6px}
+.hnotes{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.hnote{font-size:12.5px;line-height:1.65;padding:10px 12px;border-radius:8px;
+  background:rgba(255,255,255,.03);border-left:2px solid #4d7fd4}
+.hdiag{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.hdiag .metric{padding:10px 12px}
+.hmsg{font-size:12px;padding:9px 12px;border-radius:8px;margin-top:10px}
+.hmsg.ok{background:rgba(63,176,160,.12);color:#6fd0c0}
+.hmsg.err{background:rgba(224,108,108,.12);color:#e88b8b}
 </style>
 </head>
 <body>
@@ -161,6 +204,36 @@ footer p{margin:0 0 6px}
       <button id="runBtn">사이클 실행</button>
       <button id="refreshBtn">새로고침</button>
     </div>
+  </div>
+
+  <div class="panel" id="holdings" style="margin-bottom:18px">
+    <div class="hold-head">
+      <div>
+        <div class="title">내 보유 종목</div>
+        <div class="note" style="margin-top:2px">실제 계좌의 보유분입니다 —
+          봇의 모의 포트폴리오와 별개이며, 여기 넣은 종목이 봇의 매매 판단에 쓰이지 않습니다</div>
+      </div>
+      <div class="hold-actions" id="holdActions"></div>
+    </div>
+
+    <div class="hsearch">
+      <input id="symQ" placeholder="종목 검색 — 삼성전자, 애플, TIGER 미국나스닥100, SPY …"
+             autocomplete="off">
+      <div class="sug" id="symSug" style="display:none"></div>
+    </div>
+
+    <div class="hform" id="addForm" style="display:none">
+      <span id="addTicker" style="font-family:var(--mono,monospace);color:#7fb2f0"></span>
+      <label>수량 <input id="addQty" type="number" step="any" min="0"></label>
+      <label>평균단가 <input id="addAvg" type="number" step="any" min="0" placeholder="선택"></label>
+      <button id="addBtn">추가</button>
+      <button id="addLotBtn" title="이미 보유 중이면 수량을 더하고 평단을 가중평균합니다">추가매수</button>
+      <button id="addCancel">취소</button>
+    </div>
+
+    <div id="holdMsg"></div>
+    <div id="holdBody"><div class="empty">보유 종목이 없습니다. 위에서 검색해 추가하거나 증권사에서 가져오세요.</div></div>
+    <input type="file" id="csvFile" accept=".csv,.txt" style="display:none">
   </div>
 
   <div id="root"><div class="loading">에이전트 상태를 불러오는 중…</div></div>
@@ -473,6 +546,237 @@ document.getElementById('runBtn').onclick=async function(){
 
 load();
 polling=setInterval(load,15000);
+
+/* ================= 내 보유 종목 =================
+   봇 상태 폴링과 독립적으로 동작한다. 이 화면의 어떤 동작도 주문을 만들지 않는다. */
+let HOLD=null, SUG=[], PICK=null, symTimer=null;
+
+const fmtNum=(v,d=0)=>v==null?'—':Number(v).toLocaleString('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=(v,cur)=>v==null?'—':(cur==='KRW'?'₩'+fmtNum(v):'$'+fmtNum(v,2));
+const signPct=v=>v==null?'—':(v>=0?'+':'')+v.toFixed(2)+'%';
+
+function holdMsg(text,kind){
+  const el=document.getElementById('holdMsg');
+  el.innerHTML=text?`<div class="hmsg ${kind||'ok'}">${text}</div>`:'';
+  if(text&&kind!=='err') setTimeout(()=>{if(el.firstChild)el.innerHTML='';},6000);
+}
+
+async function api(url,opts){
+  const r=await fetch(url,opts);
+  let j={}; try{ j=await r.json(); }catch(e){}
+  if(!r.ok) throw new Error(j.error||j.message||('HTTP '+r.status));
+  return j;
+}
+
+/* ---- 검색 ---- */
+document.getElementById('symQ').addEventListener('input',function(){
+  const q=this.value.trim();
+  clearTimeout(symTimer);
+  if(q.length<1){document.getElementById('symSug').style.display='none';return;}
+  symTimer=setTimeout(async()=>{
+    try{
+      const j=await api('/api/symbol-search?q='+encodeURIComponent(q));
+      SUG=j.results||[];
+      const box=document.getElementById('symSug');
+      if(!SUG.length){box.innerHTML='<div><span class="ex">결과가 없습니다</span></div>';}
+      else{box.innerHTML=SUG.map((r,i)=>
+        `<div data-i="${i}"><span><span class="sym">${r.symbol}</span> ${r.name}</span>`+
+        `<span class="ex">${r.exchange||''} · ${r.currency}</span></div>`).join('');}
+      box.style.display='block';
+    }catch(e){ holdMsg('검색 실패: '+e.message,'err'); }
+  },250);
+});
+
+document.getElementById('symSug').addEventListener('click',e=>{
+  const row=e.target.closest('div[data-i]'); if(!row) return;
+  PICK=SUG[+row.dataset.i];
+  document.getElementById('symSug').style.display='none';
+  document.getElementById('symQ').value='';
+  document.getElementById('addTicker').textContent=PICK.symbol+' · '+PICK.name;
+  document.getElementById('addForm').style.display='flex';
+  document.getElementById('addQty').focus();
+});
+
+document.getElementById('addCancel').onclick=()=>{
+  document.getElementById('addForm').style.display='none'; PICK=null;
+};
+
+async function submitAdd(mode){
+  if(!PICK) return;
+  const qty=parseFloat(document.getElementById('addQty').value);
+  const avg=document.getElementById('addAvg').value;
+  if(!(qty>0)){ holdMsg('수량을 입력하세요','err'); return; }
+  try{
+    const j=await api('/api/holdings',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ticker:PICK.symbol,name:PICK.name,currency:PICK.currency,
+        quantity:qty,avg_cost:avg===''?null:parseFloat(avg),mode:mode})});
+    document.getElementById('addForm').style.display='none';
+    document.getElementById('addQty').value=''; document.getElementById('addAvg').value='';
+    PICK=null; holdMsg(j.message); loadHoldings();
+  }catch(e){ holdMsg(e.message,'err'); }
+}
+document.getElementById('addBtn').onclick=()=>submitAdd('set');
+document.getElementById('addLotBtn').onclick=()=>submitAdd('lot');
+
+/* ---- 목록 · 렌더 ---- */
+async function loadHoldings(){
+  try{ HOLD=await api('/api/holdings'); renderHoldings(); }
+  catch(e){ document.getElementById('holdBody').innerHTML=
+    `<div class="empty">보유 정보를 불러오지 못했습니다: ${e.message}</div>`; }
+}
+
+function renderActions(brokers){
+  const el=document.getElementById('holdActions');
+  const btns=(brokers||[]).map(b=>{
+    const ok=b.configured;
+    return `<button data-broker="${b.name}" ${ok?'':'disabled'} title="${
+      ok?'조회 전용 — 주문은 하지 않습니다':'설정 필요: '+(b.missing||[]).join(', ')}">${b.label} 가져오기</button>`;
+  }).join('');
+  el.innerHTML=btns+
+    '<button id="csvBtn" title="증권사에서 내려받은 잔고 CSV">CSV 가져오기</button>'+
+    '<button id="analyzeBtn">분석 실행</button>';
+  el.querySelectorAll('button[data-broker]').forEach(b=>{
+    b.onclick=async function(){
+      const label=this.textContent; this.disabled=true; this.textContent='가져오는 중…';
+      try{ const j=await api('/api/holdings/sync?broker='+this.dataset.broker,{method:'POST'});
+        holdMsg(j.message); loadHoldings();
+      }catch(e){ holdMsg(e.message,'err'); }
+      finally{ this.disabled=false; this.textContent=label; }
+    };
+  });
+  document.getElementById('csvBtn').onclick=()=>document.getElementById('csvFile').click();
+  document.getElementById('analyzeBtn').onclick=startAnalysis;
+}
+
+function renderHoldings(){
+  if(!HOLD) return;
+  renderActions(HOLD.brokers);
+  const rows=HOLD.holdings||[];
+  const body=document.getElementById('holdBody');
+  if(!rows.length){
+    body.innerHTML='<div class="empty">보유 종목이 없습니다. 위에서 검색해 추가하거나 증권사에서 가져오세요.</div>';
+    return;
+  }
+
+  const a=HOLD.analysis||{};
+  const val=a.valuation||{};
+  const vrows={}; (val.rows||[]).forEach(r=>vrows[r.ticker]=r);
+  const views={}; (a.views||[]).forEach(v=>views[v.ticker]=v);
+
+  let html='<table class="htable"><thead><tr>'+
+    '<th>종목</th><th>수량</th><th>평단</th><th>현재가</th><th>평가액</th>'+
+    '<th>비중</th><th>손익</th><th>모델 견해</th><th></th></tr></thead><tbody>';
+  rows.forEach(h=>{
+    const v=vrows[h.ticker]||{}, mv=views[h.ticker];
+    const pnlCls=v.pnl_pct==null?'':(v.pnl_pct>=0?'style="color:var(--pos,#3fb0a0)"':'style="color:var(--neg,#e06c6c)"');
+    const viewCell=mv?`<span ${mv.view_horizon_pct>=0?'style="color:var(--pos,#3fb0a0)"':'style="color:var(--neg,#e06c6c)"'}>`+
+      `${signPct(mv.view_horizon_pct)}</span> <span class="ex" style="color:var(--dim);font-size:10px">확신 ${mv.confidence}</span>`:'—';
+    html+=`<tr><td><span class="tk">${h.ticker}</span>`+
+      (h.name?`<div class="nm">${h.name}</div>`:'')+
+      `<span class="hsrc">${h.source}</span></td>`+
+      `<td>${fmtNum(h.quantity,h.quantity%1?4:0)}</td>`+
+      `<td>${money(h.avg_cost,h.currency)}</td>`+
+      `<td>${money(v.price,h.currency)}</td>`+
+      `<td>${money(v.market_value,h.currency)}</td>`+
+      `<td>${v.weight==null?'—':(v.weight*100).toFixed(1)+'%'}</td>`+
+      `<td ${pnlCls}>${signPct(v.pnl_pct)}</td>`+
+      `<td>${viewCell}</td>`+
+      `<td><span class="del" data-del="${h.ticker}" title="삭제">✕</span></td></tr>`;
+  });
+  html+='</tbody></table>';
+
+  if(val.total_value){
+    html+=`<div class="note" style="margin-top:8px">평가액 합계 `+
+      `<b>${money(val.total_value,val.base_currency)}</b> (${val.base_currency} 환산)`+
+      (val.unpriced&&val.unpriced.length?` · <span style="color:#d8a13a">시세 없음: ${val.unpriced.join(', ')}</span>`:'')+
+      (val.unconverted&&val.unconverted.length?` · <span style="color:#d8a13a">환율 없음: ${val.unconverted.join(', ')}</span>`:'')+
+      `</div>`;
+  }
+
+  const d=a.diagnostics||{};
+  if(d.concentration||d.correlation||d.volatility){
+    html+='<div class="hdiag">';
+    if(d.concentration) html+=metricBox('집중도',d.concentration.top_weight_pct.toFixed(1)+'%',
+      `최대 비중 · 유효 ${d.concentration.effective_positions}종목`);
+    if(d.correlation) html+=metricBox('평균 상관',d.correlation.avg_correlation.toFixed(2),
+      `${d.correlation.n_pairs}개 쌍 · ${d.correlation.window_days}일`);
+    if(d.volatility) html+=metricBox('연변동성',d.volatility.portfolio_vol_annual_pct.toFixed(1)+'%',
+      `분산 효과 ${d.volatility.diversification_benefit_pct.toFixed(1)}%p`);
+    if(d.pnl&&d.pnl.total_pnl_pct!=null) html+=metricBox('손익',signPct(d.pnl.total_pnl_pct),
+      `${d.pnl.covered}종목 기준 · 수익 ${d.pnl.winners}/손실 ${d.pnl.losers}`);
+    html+='</div>';
+  }
+
+  if(a.notes&&a.notes.length){
+    html+='<div class="hnotes">'+a.notes.map(n=>`<div class="hnote">${n}</div>`).join('')+'</div>';
+    if(a.disclaimer) html+=`<div class="note" style="margin-top:10px">${a.disclaimer}</div>`;
+    if(a.as_of) html+=`<div class="note">분석 시각 ${a.as_of.replace('T',' ').slice(0,16)}</div>`;
+  }else{
+    html+='<div class="note" style="margin-top:10px">「분석 실행」을 누르면 보유 종목의 모델 견해와 '+
+      '집중도·상관·손익 진단이 나옵니다 (종목당 1초 남짓).</div>';
+  }
+  body.innerHTML=html;
+
+  body.querySelectorAll('[data-del]').forEach(el=>{
+    el.onclick=async function(){
+      try{ const j=await api('/api/holdings/delete',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ticker:this.dataset.del})});
+        holdMsg(j.message); loadHoldings();
+      }catch(e){ holdMsg(e.message,'err'); }
+    };
+  });
+}
+
+function metricBox(label,value,sub){
+  return `<div class="metric"><div class="v">${value}</div>`+
+    `<div class="note">${label}</div><div class="note" style="font-size:10px">${sub}</div></div>`;
+}
+
+/* ---- CSV ---- */
+document.getElementById('csvFile').addEventListener('change',async function(){
+  const f=this.files&&this.files[0]; if(!f) return;
+  holdMsg('CSV 를 읽는 중…');
+  try{
+    const buf=await f.arrayBuffer();
+    const j=await api('/api/holdings/import',{method:'POST',
+      headers:{'Content-Type':'application/octet-stream'},body:buf});
+    holdMsg(j.message); loadHoldings();
+  }catch(e){ holdMsg(e.message,'err'); }
+  finally{ this.value=''; }
+});
+
+/* ---- 분석 ---- */
+async function startAnalysis(){
+  const btn=document.getElementById('analyzeBtn');
+  btn.disabled=true; btn.textContent='분석 중…';
+  try{
+    const j=await api('/api/holdings/analyze',{method:'POST'});
+    holdMsg(j.message);
+    const t=setInterval(async()=>{
+      try{
+        const s=await api('/api/holdings');
+        if(!s.analysis_running){ clearInterval(t); HOLD=s; renderHoldings();
+          btn.disabled=false; btn.textContent='분석 실행'; }
+      }catch(e){ clearInterval(t); btn.disabled=false; btn.textContent='분석 실행'; }
+    },3000);
+  }catch(e){ holdMsg(e.message,'err'); btn.disabled=false; btn.textContent='분석 실행'; }
+}
+
+/* 증권사 목록은 한 번만 받아 둔다.
+   스냅샷(서버 없이 여는 단일 HTML)에서는 아무 요청도 보내지 않는다. */
+(async()=>{
+  if(window.__SNAPSHOT__){
+    const h=document.getElementById('holdings');
+    if(h) h.style.display='none';
+    return;
+  }
+  try{ const b=await api('/api/brokers'); if(HOLD) HOLD.brokers=b.brokers;
+       window.__brokers=b.brokers; }catch(e){}
+  await loadHoldings();
+  if(window.__brokers&&HOLD){ HOLD.brokers=window.__brokers; renderHoldings(); }
+})();
+
 </script>
 </body>
 </html>

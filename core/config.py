@@ -82,6 +82,26 @@ CYCLE_LOSS_LIMIT = 0.05       # 한 사이클에 이만큼 잃으면 다음 사�
 # 편입하는 것은 교체가 아니므로 세지 않는다.
 TURNOVER_HARD_LIMIT = 0.25    # 이 값을 넘는 목표는 이전 비중 쪽으로 되돌린다
 
+# ---------------------------------------------------------------- 보유 종목 (실계좌)
+# 사용자가 실제 증권사에서 산 종목. 봇의 모의 장부와 **완전히 분리된** 별도 파일이다.
+# 이 데이터는 분석·표시에만 쓰이며 어떤 목표비중에도 들어가지 않는다.
+# 자세한 이유는 core/holdings.py 모듈 독스트링 참고.
+HOLDINGS_BASE_CURRENCY = os.getenv("HOLDINGS_BASE_CURRENCY", "KRW")
+
+# 증권사 연동은 **조회 전용**이다. 주문 API 는 어댑터 인터페이스에조차 없다.
+# 키는 .env 에만 두고 코드·설정 파일에 쓰지 않는다.
+TOSS_CLIENT_ID = os.getenv("TOSS_CLIENT_ID", "")
+TOSS_CLIENT_SECRET = os.getenv("TOSS_CLIENT_SECRET", "")
+TOSS_API_BASE = os.getenv("TOSS_API_BASE", "https://openapi.tossinvest.com")
+
+KIS_APP_KEY = os.getenv("KIS_APP_KEY", "")
+KIS_APP_SECRET = os.getenv("KIS_APP_SECRET", "")
+KIS_ACCOUNT = os.getenv("KIS_ACCOUNT", "")          # 8자리-2자리 (예: 12345678-01)
+KIS_API_BASE = os.getenv("KIS_API_BASE", "https://openapi.koreainvestment.com:9443")
+
+# 증권사 호출 타임아웃 (초). 대시보드 요청이 무한정 매달리지 않게 한다.
+BROKER_TIMEOUT_SEC = int(os.getenv("BROKER_TIMEOUT_SEC", "15"))
+
 # ---------------------------------------------------------------- 서버
 # 기본은 루프백 전용. 다른 기기에서 열려면 SERVER_HOST 를 명시적으로 바꿔야 한다.
 SERVER_HOST = os.getenv("SERVER_HOST", "127.0.0.1")
@@ -121,6 +141,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STATE_DIR = BASE_DIR / "state"
 STATE_FILE = STATE_DIR / "state.json"
 HISTORY_FILE = STATE_DIR / "history.jsonl"
+HOLDINGS_FILE = STATE_DIR / "holdings.json"
 WEB_DIR = BASE_DIR / "web"
 
 STATE_DIR.mkdir(parents=True, exist_ok=True)

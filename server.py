@@ -5,9 +5,21 @@
   python server.py            → http://localhost:8787
 
 엔드포인트
-  GET  /                 대시보드
-  GET  /api/state        현재 에이전트 상태 (대시보드가 15초마다 폴링)
-  POST /api/run-cycle    지금 한 사이클 실행 (백그라운드 스레드)
+  GET  /                    대시보드
+  GET  /api/state           현재 에이전트 상태 (대시보드가 15초마다 폴링)
+  POST /api/run-cycle       지금 한 사이클 실행 (백그라운드 스레드)
+
+보유 종목 (사용자가 실제로 산 종목 — 봇의 모의 장부와 별개)
+  GET  /api/holdings        보유 목록 + 마지막 분석 결과
+  POST /api/holdings        수동 추가/수정 (mode=lot 이면 추가매수)
+  POST /api/holdings/delete 삭제
+  GET  /api/symbol-search   종목 검색 (?q=삼성전자)
+  GET  /api/brokers         증권사 연동 상태
+  POST /api/holdings/sync   증권사에서 조회해 가져오기 (?broker=toss)
+  POST /api/holdings/import CSV 업로드
+  POST /api/holdings/analyze 보유 종목 분석 실행 (Kronos 견해 + 진단)
+
+증권사 연동은 **조회 전용**입니다. 주문 API 는 코드에 존재하지 않습니다.
 
 의존성은 표준 라이브러리뿐입니다 (FastAPI 불필요).
 """
@@ -17,7 +29,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from core import config, storage
+from core import config, holdings_api, storage
 
 # 한국어 로그가 Windows 기본 콘솔(cp949)에서 깨지지 않게 UTF-8 로 고정한다.
 for _stream in (sys.stdout, sys.stderr):
@@ -100,6 +112,37 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _json(self, code, payload):
+        self._send(code, json.dumps(payload, ensure_ascii=False))
+
+    def _query(self):
+        from urllib.parse import parse_qs, urlparse
+        return parse_qs(urlparse(self.path).query)
+
+    def _body_bytes(self, limit=8 * 1024 * 1024):
+        """요청 본문. 크기 상한을 둔다 — 무제한이면 메모리가 통째로 날아간다."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self._json(400, {"error": "본문이 비어 있습니다"})
+            return None
+        if length > limit:
+            self._json(413, {"error": f"파일이 너무 큽니다 (상한 {limit // 1024 // 1024}MB)"})
+            return None
+        return self.rfile.read(length)
+
+    def _body_json(self):
+        raw = self._body_bytes(limit=1024 * 1024)
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._json(400, {"error": "JSON 을 해석하지 못했습니다"})
+            return None
+
     def do_GET(self):
         if self.path.startswith("/api/state"):
             if not config.STATE_FILE.exists():
@@ -114,6 +157,15 @@ class Handler(BaseHTTPRequestHandler):
             state["_llm_available"] = config.PM_ENABLED
             state["_llm_mode"] = config.PM_LLM_MODE
             self._send(200, json.dumps(state, ensure_ascii=False))
+
+        elif self.path.startswith("/api/holdings"):
+            self._json(*holdings_api.list_holdings())
+
+        elif self.path.startswith("/api/symbol-search"):
+            self._json(*holdings_api.search(self._query().get("q", [""])[0]))
+
+        elif self.path.startswith("/api/brokers"):
+            self._json(*holdings_api.brokers_status())
 
         elif self.path in ("/", "/index.html"):
             page = config.WEB_DIR / "dashboard.html"
@@ -143,6 +195,33 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200 if ok else 400, json.dumps(
                 {"ok": ok, "message": message,
                  "llm_calls": (state or {}).get("llm_calls")}, ensure_ascii=False))
+
+        elif self.path.startswith("/api/holdings/analyze"):
+            self._json(*holdings_api.start_analysis())
+
+        elif self.path.startswith("/api/holdings/sync"):
+            broker = self._query().get("broker", [""])[0]
+            self._json(*holdings_api.sync(broker))
+
+        elif self.path.startswith("/api/holdings/import"):
+            # CSV 는 텍스트가 아니라 바이트로 받는다 (국내 증권사 파일은 대부분 cp949)
+            raw = self._body_bytes()
+            if raw is None:
+                return
+            replace = self._query().get("replace", ["0"])[0] in ("1", "true", "yes")
+            self._json(*holdings_api.import_csv(raw, replace=replace))
+
+        elif self.path.startswith("/api/holdings/delete"):
+            payload = self._body_json()
+            if payload is None:
+                return
+            self._json(*holdings_api.remove(payload.get("ticker", "")))
+
+        elif self.path.startswith("/api/holdings"):
+            payload = self._body_json()
+            if payload is None:
+                return
+            self._json(*holdings_api.add(payload))
 
         else:
             self._send(404, "not found", "text/plain")

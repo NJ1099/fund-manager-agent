@@ -67,6 +67,19 @@ def test_부제에_스냅샷_표시가_붙는다(tmp_path, demo_state):
     assert "스냅샷 (사이클 #7" in html
 
 
+def test_보유_섹션은_스냅샷에서_요청을_보내지_않는다(tmp_path, demo_state):
+    """스냅샷에는 서버가 없다.
+
+    감추기만 하면 초기화 코드가 그대로 돌아 /api/brokers 404 가 콘솔에 쌓인다.
+    그리고 공개 스냅샷에 개인 보유 정보가 실릴 이유가 없다.
+    """
+    html = build(tmp_path)
+    assert "window.__SNAPSHOT__ = true" in html
+
+    dashboard = (config.WEB_DIR / "dashboard.html").read_text(encoding="utf-8")
+    assert "if(window.__SNAPSHOT__)" in dashboard, "대시보드가 플래그를 확인하지 않는다"
+
+
 # ---------------------------------------------------------- 앵커 어긋남 방어
 def test_앵커를_못_찾으면_조용히_넘어가지_않고_실패한다(tmp_path, demo_state, monkeypatch):
     """가장 위험한 실패는 '깨진 스냅샷이 성공한 척 만들어지는' 것이다."""
