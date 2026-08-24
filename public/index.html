@@ -186,6 +186,39 @@ footer p{margin:0 0 6px}
 .hmsg{font-size:12px;padding:9px 12px;border-radius:8px;margin-top:10px}
 .hmsg.ok{background:rgba(63,176,160,.12);color:#6fd0c0}
 .hmsg.err{background:rgba(224,108,108,.12);color:#e88b8b}
+
+/* ---- 탭 ---- */
+.tabs{display:flex;gap:4px;margin:0 0 18px;border-bottom:1px solid var(--line);
+  flex-wrap:wrap}
+.tabs button{background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--dim);font-family:inherit;font-size:13px;padding:10px 16px;cursor:pointer;
+  border-radius:0;margin-bottom:-1px}
+.tabs button:hover{color:var(--fg,#e6e9ef);background:rgba(255,255,255,.03)}
+.tabs button.on{color:#7fb2f0;border-bottom-color:#4d7fd4}
+.tabpane{display:none}
+.tabpane.on{display:block}
+.doc{max-width:820px;line-height:1.85;font-size:13.5px}
+.doc h3{font-size:15px;margin:26px 0 10px;color:var(--fg,#e6e9ef);font-weight:600}
+.doc h3:first-child{margin-top:4px}
+.doc p{margin:0 0 12px;color:#b9c2ce}
+.doc ol,.doc ul{margin:0 0 14px;padding-left:20px;color:#b9c2ce}
+.doc li{margin:6px 0}
+.doc code{background:rgba(255,255,255,.07);padding:1px 6px;border-radius:4px;
+  font-family:var(--mono,monospace);font-size:12px}
+.doc .k{color:#7fb2f0;font-weight:600}
+.doc table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:12.5px}
+.doc th{text-align:left;color:var(--dim);font-weight:500;padding:7px 10px;
+  border-bottom:1px solid var(--line)}
+.doc td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:#b9c2ce;
+  vertical-align:top}
+.doc .callout{border-left:2px solid #d8a13a;background:rgba(216,161,58,.07);
+  padding:12px 14px;border-radius:0 8px 8px 0;margin:14px 0;color:#e8c377;font-size:12.5px}
+.doc .callout.info{border-left-color:#4d7fd4;background:rgba(77,127,212,.07);color:#a8c6ef}
+.step{display:flex;gap:12px;margin:0 0 14px;align-items:flex-start}
+.step .n{flex:0 0 26px;height:26px;border-radius:50%;background:rgba(77,127,212,.15);
+  color:#7fb2f0;display:flex;align-items:center;justify-content:center;font-size:12px;
+  font-weight:600;font-family:var(--mono,monospace)}
+.step .t{flex:1;color:#b9c2ce}
 </style>
 </head>
 <body>
@@ -193,25 +226,23 @@ footer p{margin:0 0 6px}
   <div class="topbar">
     <div class="brand">
       <h1>펀드매니저 에이전트</h1>
-      <div class="sub">Kronos · skfolio · NautilusTrader · PM 감독 · 스냅샷 (사이클 #14, 2026-08-24 기준)</div>
-    </div>
-    <div class="controls">
-      <span class="pill paper live-dot">PAPER ONLY</span>
-      <span class="pill src" id="pmSrc">—</span>
-      <span class="pill fresh" id="freshness">—</span>
-      <button id="pmBtn" style="display:none"
-        title="지금 화면의 사이클에 대해 LLM 논평을 새로 받습니다. 시장 데이터를 다시 부르거나 주문을 만들지 않습니다.">PM 논평 받기 ($)</button>
-      <button id="runBtn">사이클 실행</button>
-      <button id="refreshBtn">새로고침</button>
+      <div class="sub">내 종목 진단 — 비중 · 손익 · 집중도 · 상관 · 변동성</div>
     </div>
   </div>
 
+  <div class="tabs" id="tabs">
+    <button data-tab="holdings" class="on">내 종목</button>
+    <button data-tab="howto">사용법</button>
+    <button data-tab="about">소개</button>
+  </div>
+
+  <div class="tabpane on" id="pane-holdings">
   <div class="panel" id="holdings" style="margin-bottom:18px">
     <div class="hold-head">
       <div>
-        <div class="title">내 보유 종목</div>
-        <div class="note" style="margin-top:2px">실제 계좌의 보유분입니다 —
-          봇의 모의 포트폴리오와 별개이며, 여기 넣은 종목이 봇의 매매 판단에 쓰이지 않습니다</div>
+        <div class="title">내 종목</div>
+        <div class="note" style="margin-top:2px">가진 종목을 넣으면 실제 시세로 비중·손익과 분산 상태를 계산합니다 —
+          목록은 이 브라우저에만 저장되고 서버로 전송되지 않습니다</div>
       </div>
       <div class="hold-actions" id="holdActions"></div>
     </div>
@@ -235,9 +266,115 @@ footer p{margin:0 0 6px}
     <div id="holdBody"><div class="empty">보유 종목이 없습니다. 위에서 검색해 추가하거나 증권사에서 가져오세요.</div></div>
     <input type="file" id="csvFile" accept=".csv,.txt" style="display:none">
   </div>
+  </div>
 
-  <script id="snapshot-state" type="application/json">{"meta": {"execution_mode": "paper", "live_orders_allowed": false, "pm_source": "rules:PM_LLM_MODE=never", "pm_llm_mode": "never", "pm_llm_available": true, "kronos_model": "NeoQuasar/Kronos-mini", "sample_count": 16, "pred_len": 5, "lookback": 300, "top_k": 5, "watchlist_size": 10, "benchmark": "SPY", "max_turnover": 0.1, "turnover_hard_limit": 0.25, "tx_cost_bps": 10.0, "max_weight": 0.4, "max_drawdown_limit": 0.2, "versions": {"skfolio": "0.20.2", "nautilus_trader": "1.231.0"}}, "cycle_no": 14, "as_of": "2026-08-24", "generated_at": "2026-08-24T17:27:40.178229+00:00", "elapsed_sec": 13.7, "order_seq": 55, "llm_calls": 0, "prices": {"SPY": 763.5750122070312, "QQQ": 707.530029296875, "IWM": 297.8699951171875, "TLT": 82.63999938964844, "IEF": 93.03500366210938, "GLD": 425.6400146484375, "SLV": 62.0, "XLE": 62.95500183105469, "XLF": 57.959999084472656, "XLK": 180.44000244140625}, "portfolio": {"equity": 1233325.54, "start_equity": 1000000.0, "peak_equity": 1233325.54, "period_return_pct": 1.766, "weights": {"GLD": 0.03761761194502231, "TLT": 0.251472873497469, "XLF": 0.1513235483042043, "IEF": 0.3999524643640455, "XLE": 0.1594643256868636}, "target_weights": {"GLD": 0.037734452782909135, "IEF": 0.40000000001306085, "TLT": 0.2514669861068384, "XLE": 0.15947855555278345, "XLF": 0.15132000554440822}, "previous_weights": {"GLD": 0.04037759224177771, "TLT": 0.2514669859630901, "XLF": 0.15132000548632266, "IEF": 0.3883264960134981, "XLE": 0.16849533133841668}, "meta": {"solver": "CLARABEL", "fallback_used": false, "constraints": {"max_weight": 0.4, "max_turnover": 0.1, "tx_cost_bps": 10.0, "cvar_beta": 0.95}, "bl_shift_bp": {"XLK": 27.626, "QQQ": 19.814, "SPY": 9.844, "TLT": 8.619, "IWM": 8.04, "GLD": -6.561, "XLF": -3.664, "IEF": 1.391, "XLE": -12.034}, "pick_fallback": false, "risk_gate": {"triggered": false, "reason": null, "exposure": 1.0, "drawdown_pct": 0.0}, "turnover_gate": {"gross_turnover": 0.023333, "sell_turnover": 0.01166, "limit": 0.25, "scaled": false, "scale": 1.0, "final_turnover": 0.01166, "skipped": false}}, "degraded": [], "cash": 208.65, "cash_weight": 0.000169, "positions": {"GLD": 109, "TLT": 3753, "XLF": 3220, "IEF": 5302, "XLE": 3124}, "costs_paid": 3382.79, "turnover": 0.023426, "turnover_sell": 0.011791}, "performance": {"n_cycles": 14, "cum_return_pct": 23.333, "benchmark_cum_return_pct": 21.475, "excess_return_pct": 1.858, "max_drawdown_pct": 2.067, "benchmark_max_drawdown_pct": 4.066, "volatility_annual_pct": 9.82, "sharpe": 2.16, "win_rate_pct": 76.9, "best_cycle_pct": 7.02, "worst_cycle_pct": -2.06, "avg_turnover_pct": 7.18, "total_costs": 3382.79, "cost_drag_pct": 0.338, "annualized": true}, "equity_curve": [{"as_of": "2025-08-21", "cycle_no": 1, "strategy": 99.9, "benchmark": 100.0}, {"as_of": "2025-09-19", "cycle_no": 2, "strategy": 106.663, "benchmark": 104.719}, {"as_of": "2025-10-17", "cycle_no": 3, "strategy": 114.125, "benchmark": 104.828}, {"as_of": "2025-11-14", "cycle_no": 4, "strategy": 111.766, "benchmark": 106.017}, {"as_of": "2025-12-15", "cycle_no": 5, "strategy": 114.231, "benchmark": 107.406}, {"as_of": "2026-01-14", "cycle_no": 6, "strategy": 118.064, "benchmark": 109.247}, {"as_of": "2026-02-12", "cycle_no": 7, "strategy": 120.153, "benchmark": 107.809}, {"as_of": "2026-03-13", "cycle_no": 8, "strategy": 117.895, "benchmark": 104.805}, {"as_of": "2026-04-13", "cycle_no": 9, "strategy": 119.18, "benchmark": 108.869}, {"as_of": "2026-05-11", "cycle_no": 10, "strategy": 119.977, "benchmark": 117.311}, {"as_of": "2026-06-09", "cycle_no": 11, "strategy": 119.536, "benchmark": 116.954}, {"as_of": "2026-07-09", "cycle_no": 12, "strategy": 119.743, "benchmark": 119.588}, {"as_of": "2026-08-06", "cycle_no": 13, "strategy": 121.195, "benchmark": 122.268}, {"as_of": "2026-08-24", "cycle_no": 14, "strategy": 123.333, "benchmark": 121.475}], "watchlist": [{"ticker": "XLK", "last_close": 180.44, "view_daily": 0.005396100133657456, "view_horizon_pct": 2.698, "dispersion": 0.021945461630821228, "up_path_ratio": 0.875, "fan": {"p05": [179.68, 180.86, 181.23, 179.86, 179.19], "p50": [182.27, 183.6, 183.88, 184.69, 184.9], "p95": [184.34, 185.98, 189.56, 189.71, 191.12]}, "mom_20d_pct": 3.52, "mom_60d_pct": -3.32, "realized_vol_pct": 33.26, "infer_sec": 1.0, "asof": "2026-08-24", "confidence": 0.468, "conviction": 1.2627, "rank": 1, "direction": "LONG"}, {"ticker": "QQQ", "last_close": 707.53, "view_daily": 0.0040640592575073246, "view_horizon_pct": 2.032, "dispersion": 0.020349668338894844, "up_path_ratio": 0.812, "fan": {"p05": [705.3, 705.79, 701.68, 703.59, 700.62], "p50": [716.16, 716.11, 716.6, 719.87, 725.81], "p95": [725.66, 733.84, 734.84, 738.98, 741.6]}, "mom_20d_pct": 3.73, "mom_60d_pct": -3.71, "realized_vol_pct": 22.73, "infer_sec": 0.89, "asof": "2026-08-24", "confidence": 0.502, "conviction": 1.0201, "rank": 2, "direction": "LONG"}, {"ticker": "SPY", "last_close": 763.58, "view_daily": 0.0020102113485336304, "view_horizon_pct": 1.005, "dispersion": 0.010073990561068058, "up_path_ratio": 0.75, "fan": {"p05": [760.83, 760.56, 758.69, 759.22, 760.24], "p50": [764.27, 769.01, 767.98, 769.62, 770.38], "p95": [771.32, 779.9, 780.1, 779.49, 785.11]}, "mom_20d_pct": 3.31, "mom_60d_pct": 1.45, "realized_vol_pct": 13.27, "infer_sec": 0.9, "asof": "2026-08-24", "confidence": 0.72, "conviction": 0.7236, "rank": 3, "direction": "LONG"}, {"ticker": "TLT", "last_close": 82.64, "view_daily": 0.0018003292381763459, "view_horizon_pct": 0.9, "dispersion": 0.007541556376963854, "up_path_ratio": 0.938, "fan": {"p05": [82.27, 82.61, 82.61, 82.39, 82.58], "p50": [82.88, 83.06, 83.24, 83.27, 83.26], "p95": [83.71, 83.77, 84.01, 84.28, 84.43]}, "mom_20d_pct": -0.93, "mom_60d_pct": -2.49, "realized_vol_pct": 12.14, "infer_sec": 1.01, "asof": "2026-08-24", "confidence": 0.774, "conviction": 0.6966, "rank": 4, "direction": "LONG"}, {"ticker": "IWM", "last_close": 297.87, "view_daily": 0.001967482268810272, "view_horizon_pct": 0.984, "dispersion": 0.015563077293336391, "up_path_ratio": 0.75, "fan": {"p05": [298.83, 295.7, 293.05, 296.43, 292.57], "p50": [301.18, 302.6, 302.14, 301.28, 301.83], "p95": [304.73, 307.09, 306.81, 308.23, 307.23]}, "mom_20d_pct": 1.69, "mom_60d_pct": 2.24, "realized_vol_pct": 15.83, "infer_sec": 1.0, "asof": "2026-08-24", "confidence": 0.603, "conviction": 0.5934, "rank": 5, "direction": "LONG"}, {"ticker": "GLD", "last_close": 425.64, "view_daily": -0.0022531889379024507, "view_horizon_pct": -1.127, "dispersion": 0.033065587282180786, "up_path_ratio": 0.375, "fan": {"p05": [419.53, 414.95, 401.59, 401.29, 396.7], "p50": [428.5, 428.21, 419.78, 429.8, 423.02], "p95": [434.7, 436.06, 437.5, 435.87, 436.32]}, "mom_20d_pct": 13.62, "mom_60d_pct": 3.12, "realized_vol_pct": 25.45, "infer_sec": 1.0, "asof": "2026-08-24", "confidence": 0.231, "conviction": 0.2603, "rank": 6, "direction": "AVOID"}, {"ticker": "SLV", "last_close": 62.0, "view_daily": -0.002249649167060852, "view_horizon_pct": -1.125, "dispersion": 0.03685887157917023, "up_path_ratio": 0.375, "fan": {"p05": [60.94, 60.41, 60.32, 59.92, 57.64], "p50": [62.15, 62.07, 61.51, 61.13, 61.64], "p95": [63.84, 64.05, 63.91, 63.82, 63.85]}, "mom_20d_pct": 17.14, "mom_60d_pct": -9.3, "realized_vol_pct": 37.37, "infer_sec": 1.0, "asof": "2026-08-24", "confidence": 0.15, "conviction": 0.1687, "rank": 7, "direction": "AVOID"}, {"ticker": "XLF", "last_close": 57.96, "view_daily": -0.00017148032784461976, "view_horizon_pct": -0.086, "dispersion": 0.00719310762360692, "up_path_ratio": 0.438, "fan": {"p05": [56.93, 57.12, 57.09, 57.14, 57.3], "p50": [57.35, 57.54, 57.54, 57.81, 57.89], "p95": [58.07, 58.2, 58.24, 58.13, 58.61]}, "mom_20d_pct": 1.9, "mom_60d_pct": 13.44, "realized_vol_pct": 11.79, "infer_sec": 1.0, "asof": "2026-08-24", "confidence": 0.782, "conviction": 0.0673, "rank": 8, "direction": "AVOID"}, {"ticker": "XLE", "last_close": 62.96, "view_daily": 0.00016225054860115052, "view_horizon_pct": 0.081, "dispersion": 0.015337873250246048, "up_path_ratio": 0.5, "fan": {"p05": [61.87, 62.42, 61.74, 61.45, 61.55], "p50": [63.55, 63.61, 63.26, 63.25, 63.07], "p95": [63.94, 64.83, 64.66, 64.81, 64.3]}, "mom_20d_pct": 7.87, "mom_60d_pct": 11.34, "realized_vol_pct": 24.15, "infer_sec": 1.0, "asof": "2026-08-24", "confidence": 0.608, "conviction": 0.0492, "rank": 9, "direction": "LONG"}, {"ticker": "IEF", "last_close": 93.04, "view_daily": -3.714337944984436e-05, "view_horizon_pct": -0.019, "dispersion": 0.003983950242400169, "up_path_ratio": 0.438, "fan": {"p05": [92.91, 92.85, 92.66, 92.61, 92.49], "p50": [93.06, 92.99, 93.01, 93.13, 92.96], "p95": [93.31, 93.36, 93.33, 93.36, 93.55]}, "mom_20d_pct": 0.08, "mom_60d_pct": -0.6, "realized_vol_pct": 4.86, "infer_sec": 1.01, "asof": "2026-08-24", "confidence": 0.85, "conviction": 0.0161, "rank": 10, "direction": "AVOID"}], "watch_notes": {"XLK": "경로가 넓어 판단 보류", "QQQ": "경로가 넓어 판단 보류", "SPY": "확신도는 높으나 견해 크기가 작아 미편입", "TLT": "확신도와 비중이 함께 높은 핵심 보유", "IWM": "확신도는 높으나 견해 크기가 작아 미편입", "GLD": "소액 편입, 관찰 유지", "SLV": "경로가 넓어 판단 보류", "XLF": "확신도와 비중이 함께 높은 핵심 보유", "XLE": "확신도와 비중이 함께 높은 핵심 보유", "IEF": "확신도와 비중이 함께 높은 핵심 보유"}, "picks": ["XLK", "QQQ", "SPY", "TLT", "IWM"], "orders": [{"ts": "2026-08-24 00:00", "client_order_id": "O-000053", "instrument": "XLE.SIM", "ticker": "XLE", "side": "SELL", "quantity": 177, "price": 62.96, "notional": 11143.04, "cost": 11.14, "status": "SIMULATED"}, {"ts": "2026-08-24 00:00", "client_order_id": "O-000054", "instrument": "GLD.SIM", "ticker": "GLD", "side": "SELL", "quantity": 8, "price": 425.64, "notional": 3405.12, "cost": 3.41, "status": "SIMULATED"}, {"ts": "2026-08-24 00:00", "client_order_id": "O-000055", "instrument": "IEF.SIM", "ticker": "IEF", "side": "BUY", "quantity": 154, "price": 93.04, "notional": 14327.39, "cost": 14.33, "status": "SIMULATED"}], "pm_opinion": "2026-08-24 기준, 주목도(확신도×견해크기) 1위는 XLK로 5일 견해 +2.70%에 확신도 0.47, 경로의 88%가 상승을 가리켰습니다. 확신도 자체가 가장 높은 종목은 IEF(0.85)입니다. 배분 결과는 IEF 40.0%, TLT 25.1%, XLE 15.9%, XLF 15.1% 입니다. 확신도가 가장 낮은 SLV(0.15)는 비중이 0.0%로 억제돼 있어, Black-Litterman의 되돌림이 의도대로 작동한 것으로 보입니다. 주문은 매수 1건, 매도 2건이 모의 생성됐고 실제로 전송된 것은 없습니다. 이 모델의 예측력은 독립 검증에서 무작위 걷기와 구분되지 않은 바 있으므로, 위 해석은 전부 잠정적입니다.", "pm_source": "rules:PM_LLM_MODE=never", "history": [{"cycle_no": 1, "as_of": "2025-08-21", "equity": 999001.05, "start_equity": 1000000.0, "period_return_pct": 0.0, "n_orders": 4, "weights": {"SPY": 0.100045, "IWM": 0.10007, "GLD": 0.400184, "TLT": 0.399653}, "top_pick": "TLT", "benchmark_close": 628.5850830078125, "turnover": 0.0, "turnover_gross": 0.99995189304493, "costs_paid": 998.9529881134033, "cash_weight": 4.810695506989491e-05}, {"cycle_no": 2, "as_of": "2025-09-19", "equity": 1066630.04, "start_equity": 1000000.0, "period_return_pct": 6.773, "n_orders": 3, "weights": {"SPY": 0.098123, "IWM": 0.101745, "GLD": 0.399716, "TLT": 0.399983}, "top_pick": "XLE", "benchmark_close": 658.2465209960938, "turnover": 0.013980250624808954, "turnover_gross": 0.027572204819038174, "costs_paid": 1028.3572558898925, "cash_weight": 0.00043335195311517815}, {"cycle_no": 3, "as_of": "2025-10-17", "equity": 1141247.06, "start_equity": 1000000.0, "period_return_pct": 7.02, "n_orders": 4, "weights": {"SPY": 0.091803, "IWM": 0.034717, "GLD": 0.373227, "TLT": 0.400021, "XLF": 0.10001}, "top_pick": "IEF", "benchmark_close": 658.9308471679688, "turnover": 0.11563941619715501, "turnover_gross": 0.2314613150678072, "costs_paid": 1292.5243690872192, "cash_weight": 0.00022244212888558381}, {"cycle_no": 4, "as_of": "2025-11-14", "equity": 1117659.17, "start_equity": 1000000.0, "period_return_pct": -2.06, "n_orders": 4, "weights": {"SPY": 0.094208, "GLD": 0.368338, "TLT": 0.400004, "XLF": 0.136865}, "top_pick": "GLD", "benchmark_close": 666.4088745117188, "turnover": 0.03517350779056602, "turnover_gross": 0.06998864106284199, "costs_paid": 1370.6898942489624, "cash_weight": 0.0005854953436983575}, {"cycle_no": 5, "as_of": "2025-12-15", "equity": 1142314.01, "start_equity": 1000000.0, "period_return_pct": 2.209, "n_orders": 3, "weights": {"SPY": 0.092791, "GLD": 0.365893, "TLT": 0.400003, "XLF": 0.140396}, "top_pick": "XLK", "benchmark_close": 675.1365356445312, "turnover": 0.014090961779365613, "turnover_gross": 0.02783739428264856, "costs_paid": 1402.4872266311645, "cash_weight": 0.0009173717862522853}, {"cycle_no": 6, "as_of": "2026-01-14", "equity": 1180641.15, "start_equity": 1000000.0, "period_return_pct": 3.362, "n_orders": 3, "weights": {"SPY": 0.091318, "GLD": 0.347782, "TLT": 0.400017, "XLF": 0.160831}, "top_pick": "XLE", "benchmark_close": 686.7106323242188, "turnover": 0.03316526640228967, "turnover_gross": 0.06716650290023422, "costs_paid": 1481.7679574127196, "cash_weight": 5.156146029428951e-05}, {"cycle_no": 7, "as_of": "2026-02-12", "equity": 1201525.74, "start_equity": 1000000.0, "period_return_pct": 1.789, "n_orders": 3, "weights": {"SPY": 0.186686, "GLD": 0.261849, "TLT": 0.40004, "XLF": 0.150856}, "top_pick": "XLK", "benchmark_close": 677.668701171875, "turnover": 0.10023436376235689, "turnover_gross": 0.19995110552458462, "costs_paid": 1721.948121078491, "cash_weight": 0.0005682771075475965}, {"cycle_no": 8, "as_of": "2026-03-13", "equity": 1178953.06, "start_equity": 1000000.0, "period_return_pct": -1.866, "n_orders": 4, "weights": {"SPY": 0.184401, "GLD": 0.208735, "TLT": 0.400035, "XLF": 0.206263}, "top_pick": "SPY", "benchmark_close": 658.7890014648438, "turnover": 0.06421498900359027, "turnover_gross": 0.12844373326721073, "costs_paid": 1873.364426071167, "cash_weight": 0.0005653279226633596}, {"cycle_no": 9, "as_of": "2026-04-13", "equity": 1191801.0, "start_equity": 1000000.0, "period_return_pct": 1.099, "n_orders": 4, "weights": {"SPY": 0.178003, "GLD": 0.161095, "TLT": 0.399988, "XLF": 0.260638}, "top_pick": "QQQ", "benchmark_close": 684.3369750976562, "turnover": 0.045421565081323084, "turnover_gross": 0.09112713238622258, "costs_paid": 1981.9448168106078, "cash_weight": 0.00027518036554172545}, {"cycle_no": 10, "as_of": "2026-05-11", "equity": 1199767.36, "start_equity": 1000000.0, "period_return_pct": 0.709, "n_orders": 5, "weights": {"SPY": 0.189917, "GLD": 0.059414, "TLT": 0.393329, "XLF": 0.156732, "IEF": 0.100035, "XLE": 0.100013}, "top_pick": "IWM", "benchmark_close": 737.4002685546875, "turnover": 0.20049215320942843, "turnover_gross": 0.4006972302743424, "costs_paid": 2462.7908776855465, "cash_weight": 0.0005603198244988686}, {"cycle_no": 11, "as_of": "2026-06-09", "equity": 1195363.23, "start_equity": 1000000.0, "period_return_pct": -0.333, "n_orders": 6, "weights": {"SPY": 0.089791, "GLD": 0.051652, "TLT": 0.344335, "XLF": 0.142089, "IEF": 0.199806, "XLE": 0.172029}, "top_pick": "QQQ", "benchmark_close": 735.1560668945312, "turnover": 0.17104682207555655, "turnover_gross": 0.342358440401285, "costs_paid": 2872.278600967407, "cash_weight": 0.0002973953984635788}, {"cycle_no": 12, "as_of": "2026-07-09", "equity": 1197430.92, "start_equity": 1000000.0, "period_return_pct": 0.193, "n_orders": 4, "weights": {"SPY": 0.060894, "GLD": 0.049901, "TLT": 0.274288, "XLF": 0.149352, "IEF": 0.299955, "XLE": 0.165225}, "top_pick": "SLV", "benchmark_close": 751.7100219726562, "turnover": 0.10015669441510217, "turnover_gross": 0.20022486767855863, "costs_paid": 3112.074736946105, "cash_weight": 0.00038534357370369806}, {"cycle_no": 13, "as_of": "2026-08-06", "equity": 1211946.64, "start_equity": 1000000.0, "period_return_pct": 1.232, "n_orders": 5, "weights": {"GLD": 0.037618, "TLT": 0.255537, "XLF": 0.153594, "IEF": 0.394825, "XLE": 0.158411}, "top_pick": "XLK", "benchmark_close": 768.5599975585938, "turnover": 0.09957928567998059, "turnover_gross": 0.19952539705708952, "costs_paid": 3353.9137027359, "cash_weight": 1.3826583323763026e-05}, {"cycle_no": 14, "as_of": "2026-08-24", "equity": 1233325.54, "start_equity": 1000000.0, "period_return_pct": 1.766, "n_orders": 3, "weights": {"GLD": 0.037618, "TLT": 0.251473, "XLF": 0.151324, "IEF": 0.399952, "XLE": 0.159464}, "top_pick": "XLK", "benchmark_close": 763.5750122070312, "turnover": 0.01179098594830847, "turnover_gross": 0.02342638465111644, "costs_paid": 3382.7855460052488, "cash_weight": 0.00016917620239530217}]}</script>
-  <div style="max-width:1180px;margin:18px auto 0;padding:12px 16px;border:1px solid #d8a13a;border-radius:10px;background:#2a2113;color:#e8c377;font-size:13px;line-height:1.7"><b>공개 데모 · 전 구간 모의투자</b><br>실제 시장 데이터로 파이프라인을 돌린 결과지만 브로커에 전송된 주문은 하나도 없습니다. 누군가의 실계좌가 아닙니다.<br><b>여기 보이는 성과를 그대로 믿지 마세요.</b> 표본이 사이클 수십 개뿐이고, 슬리피지가 반영되지 않았으며(종가 전량 체결 가정), 이 구간은 상승장이었습니다. 다른 구간에서는 같은 설정으로 SPY 에 뒤졌습니다. 이 모델의 예측력은 검증되지 않았습니다 — 원저자의 독립 평가에서 무작위 걷기와 구분되지 않았습니다.<br>투자 조언이 아닙니다. 직접 돌려보려면 <a href="https://github.com/NJ1099/fund-manager-agent" style="color:#f0d19a">GitHub 저장소</a>를 참고하세요.</div><div id="root"><div class="loading">에이전트 상태를 불러오는 중…</div></div>
+  <div class="tabpane" id="pane-howto">
+    <div class="panel doc">
+      <h3>종목 넣기</h3>
+      <div class="step"><div class="n">1</div><div class="t">
+        맨 위 검색창에 이름을 칩니다. <span class="k">삼성전자</span>,
+        <span class="k">애플</span>, <span class="k">TIGER 미국나스닥100</span>,
+        <span class="k">SPY</span> — 한글·영문·종목코드 모두 됩니다.
+        국내 종목의 코스피/코스닥 구분은 알아서 붙습니다.</div></div>
+      <div class="step"><div class="n">2</div><div class="t">
+        뜨는 목록에서 원하는 종목을 클릭합니다.</div></div>
+      <div class="step"><div class="n">3</div><div class="t">
+        <b>수량</b>을 넣고 <b>추가</b>를 누릅니다.
+        <b>평균단가</b>는 선택인데, 넣으면 손익이 함께 계산됩니다.</div></div>
+
+      <h3>이미 가진 종목을 더 샀다면</h3>
+      <p>같은 종목을 다시 검색해 <b>추가매수</b>를 누르면 수량은 더해지고
+        평단은 가중평균으로 다시 계산됩니다. <b>추가</b>는 기존 내용을 덮어씁니다.</p>
+
+      <h3>지우기</h3>
+      <p>표 오른쪽 <code>✕</code> 를 누르면 그 종목만 사라집니다.
+        전부 지우려면 하나씩 지우거나, 브라우저 사이트 데이터를 비우면 됩니다.</p>
+
+      <h3>내 데이터는 어디에 있나</h3>
+      <div class="callout info">
+        넣은 종목은 <b>지금 쓰는 브라우저에만</b> 저장됩니다(localStorage).
+        서버로 전송되지 않고, 다른 사람에게 보이지 않으며, 다른 기기·다른 브라우저에도
+        넘어가지 않습니다. 폰에서 보려면 폰에서 따로 넣어야 합니다.<br>
+        시크릿 창을 쓰거나 브라우저 데이터를 지우면 목록도 함께 사라집니다.
+      </div>
+
+      <h3>숫자는 언제 갱신되나</h3>
+      <p>종목을 추가하거나 삭제하면 자동으로 다시 계산합니다.
+        시세만 새로 받고 싶으면 오른쪽 위 <b>새로고침</b>을 누르세요.
+        상관·변동성은 지난 1년치 일간 데이터로 계산하므로 몇 초 걸릴 수 있습니다.</p>
+
+      <h3>안 되는 것</h3>
+      <table>
+        <tr><th>항목</th><th>이유</th></tr>
+        <tr><td>모델 견해(Kronos)</td>
+            <td>시계열 모델 추론이 필요합니다. 이 페이지는 정적 호스팅이라 돌릴 수 없고,
+                로컬에서 <code>python server.py</code> 로 띄우면 나옵니다</td></tr>
+        <tr><td>증권사 연동 · CSV 가져오기</td>
+            <td>계좌 자격증명을 다루므로 로컬 실행에서만 제공합니다</td></tr>
+        <tr><td>매수 · 매도</td>
+            <td>이 프로그램에는 주문 기능이 아예 없습니다. 설계상 그렇습니다</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="tabpane" id="pane-about">
+    <div class="panel doc">
+      <h3>이게 뭔가요</h3>
+      <p>오픈소스 세 개(<b>Kronos</b> 시계열 예측, <b>skfolio</b> 포트폴리오 최적화,
+        <b>NautilusTrader</b> 주문 도메인)를 엮어 만든 <b>모의투자 에이전트</b>의
+        공개 화면입니다. 이 페이지에서는 그중 <b>보유 종목 진단</b> 부분을 쓸 수 있습니다.</p>
+      <p>가진 종목을 넣으면 실제 시세로 평가액·비중·손익을 계산하고,
+        <b>포트폴리오가 실제로 분산되어 있는지</b>를 숫자로 보여줍니다.</p>
+
+      <h3>지표 읽는 법</h3>
+      <table>
+        <tr><th>지표</th><th>무엇을 말하나</th></tr>
+        <tr><td><b>집중도</b></td>
+            <td>가장 큰 종목이 차지하는 비중. 35%를 넘으면 경고를 띄웁니다</td></tr>
+        <tr><td><b>유효 종목 수</b></td>
+            <td>비중 쏠림을 감안한 실질 종목 수(허핀달 지수의 역수).
+                10종목을 가졌어도 한 종목이 90%면 <b>사실상 1종목</b>입니다</td></tr>
+        <tr><td><b>평균 상관</b></td>
+            <td>보유 종목들이 같이 움직이는 정도. 0.7을 넘으면 종목 수를 늘려도
+                위험이 잘 줄지 않습니다 — 분산은 <b>개수가 아니라 상관</b>의 문제입니다</td></tr>
+        <tr><td><b>연변동성</b></td>
+            <td>포트폴리오 전체가 1년에 얼마나 출렁이는지(연율 표준편차)</td></tr>
+        <tr><td><b>분산 효과</b></td>
+            <td>종목별 변동성을 비중대로 평균낸 값보다 포트폴리오 변동성이 얼마나
+                낮은지. 이 차이가 분산으로 실제로 얻은 몫입니다</td></tr>
+        <tr><td><b>통화 노출</b></td>
+            <td>해외 종목 비중. 원화로 볼 때 <b>환율에도 함께 걸려 있다</b>는 뜻입니다</td></tr>
+      </table>
+
+      <h3>로컬에서 돌리면 더 되는 것</h3>
+      <ul>
+        <li><b>모델 견해</b> — 종목마다 5거래일 기대수익과 확신도를 뽑습니다</li>
+        <li><b>봇 대시보드</b> — 모의 포트폴리오를 자동 운용하고 SPY와 성과를 비교합니다</li>
+        <li><b>백테스트</b> — 과거 구간을 리플레이해 전략을 검증합니다</li>
+        <li><b>증권사 연동</b> — 토스증권·한국투자증권에서 잔고를 가져옵니다(조회 전용)</li>
+      </ul>
+      <p>설치 방법은 저장소에 있습니다 —
+        <a href="https://github.com/NJ1099/fund-manager-agent" style="color:#7fb2f0"
+           target="_blank" rel="noopener">github.com/NJ1099/fund-manager-agent</a></p>
+
+      <h3>꼭 알아두실 것</h3>
+      <div class="callout">
+        <b>투자 조언이 아닙니다.</b> 여기 나오는 어떤 숫자도 매수·매도 권유가 아닙니다.<br><br>
+        <b>주문 기능이 없습니다.</b> 이 프로그램은 어떤 증권사로도 주문을 보내지 않습니다.
+        코드에 그 경로 자체가 없습니다.<br><br>
+        <b>예측 모델은 검증되지 않았습니다.</b> 원저자의 독립 평가에서 이 모델은 무작위
+        걷기와 통계적으로 구분되지 않았습니다. 모델 견해는 참고 이상으로 쓰지 마세요.
+        반면 집중도·상관·변동성 같은 진단은 <b>예측이 아니라 사실</b>이므로 그대로 믿어도
+        됩니다.<br><br>
+        <b>시세는 지연될 수 있습니다.</b> 무료 공개 데이터를 씁니다.
+      </div>
+
+      <h3>만든 것</h3>
+      <p>MIT 라이선스 오픈소스입니다. 코드·이슈·개선 제안 모두 저장소에서 받습니다.</p>
+    </div>
+  </div>
+
+
 </div>
 
 <script>
@@ -247,6 +384,24 @@ const c=t=>COLORS[t]||'#7b8794';
 const usd=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=v=>(v>=0?'+':'')+v.toFixed(2)+'%';
 let polling=null;
+
+/* ---- 탭 전환 ----
+   봇 대시보드 탭은 로컬 서버 모드에서만 나온다. 정적 배포본에는 봇 화면 자체가
+   빌드에 실리지 않으므로(개인 데모 데이터를 공개하지 않기 위해서이기도 하다)
+   탭을 띄워봐야 빈 화면만 보인다. */
+function showTab(name){
+  document.querySelectorAll('.tabpane').forEach(p=>{
+    p.classList.toggle('on', p.id === 'pane-' + name);
+  });
+  document.querySelectorAll('#tabs button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.tab === name);
+  });
+  try{ localStorage.setItem('fma.tab', name); }catch(e){}
+}
+document.getElementById('tabs').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-tab]');
+  if (b && b.style.display !== 'none') showTab(b.dataset.tab);
+});
 
 async function load(){
   try{
@@ -509,8 +664,12 @@ function render(s){
     </footer>`;
 }
 
-document.getElementById('refreshBtn').onclick=load;
-document.getElementById('pmBtn').onclick=async function(){
+// 봇 컨트롤은 '내 종목' 전용 빌드에는 DOM 자체가 없다 (봇 화면을 들어내므로).
+// 없는 버튼에 핸들러를 걸다 죽으면 그 아래 스크립트가 통째로 멈춘다.
+const _refreshBtn=document.getElementById('refreshBtn');
+if(_refreshBtn) _refreshBtn.onclick=load;
+const _pmBtn=document.getElementById('pmBtn');
+if(_pmBtn) _pmBtn.onclick=async function(){
   const label=this.textContent;
   this.disabled=true; this.textContent='LLM 호출 중…';
   try{
@@ -530,7 +689,8 @@ document.getElementById('pmBtn').onclick=async function(){
   }
   this.disabled=false; this.textContent=label;
 };
-document.getElementById('runBtn').onclick=async function(){
+const _runBtn=document.getElementById('runBtn');
+if(_runBtn) _runBtn.onclick=async function(){
   this.disabled=true; this.textContent='실행 중…';
   try{
     await fetch('/api/run-cycle',{method:'POST'});
@@ -546,24 +706,11 @@ document.getElementById('runBtn').onclick=async function(){
 };
 
 
-// ---- 스냅샷 모드: 서버 없이 임베드된 상태를 그대로 렌더한다 ----
-const SNAPSHOT = JSON.parse(document.getElementById('snapshot-state').textContent);
-// 스냅샷에는 서버가 없다. 서버를 부르는 버튼은 전부 감춘다 —
-// 남겨두면 눌렀을 때 조용히 실패한다. 특히 'PM 논평 받기 ($)' 는
-// render() 가 상태를 보고 다시 켜므로 render 뒤에 숨겨야 한다.
-SNAPSHOT._llm_available = false;
-async function load(){
-  render(SNAPSHOT);
-  for (const id of ['runBtn','refreshBtn','pmBtn']) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  }
-}
-// '내 보유' 섹션의 동작 모드. 두 가지로 빌드된다.
-//   기본(snapshot) : 서버가 전혀 없는 단일 HTML. 보유 섹션은 아무 요청도 보내지 않는다.
-//   remote         : Vercel 처럼 검색·시세 중계 함수(/api/search, /api/market)만 있는 곳.
-//                    보유 목록은 방문자 브라우저의 localStorage 에 저장되고,
-//                    진단은 브라우저에서 계산한다. Kronos 견해는 나오지 않는다.
+// ---- '내 종목' 전용 배포본 ----
+// 봇 화면(모의 포트폴리오·성과·PM 논평)은 이 빌드에 실려 있지 않다.
+// 운영자의 운용 상태를 공개할 이유가 없고, 방문자에게 필요한 것은 자기 종목을
+// 넣어보는 화면뿐이기 때문이다.
+async function load(){}
 window.__REMOTE__ = true;
 window.__BASE_CCY__ = "KRW";
 
@@ -1120,10 +1267,30 @@ async function startAnalysis(){
 
 /* ---------------- 시작 ---------------- */
 (async()=>{
+  // 탭 구성은 모드마다 다르다.
+  //   snapshot : 봇 화면만 보여준다 (공유·보관용 스냅샷의 원래 용도)
+  //   remote   : 봇 화면이 빌드에 없다 → '내 종목' 중심
+  //   server   : 전부. 봇을 실제로 돌리는 환경이므로 봇 탭도 켠다
+  const botPane=document.getElementById('pane-bot');
+  const botTab=document.getElementById('botTab');
   if(MODE==='snapshot'){
+    document.getElementById('tabs').style.display='none';
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('on'));
+    if(botPane) botPane.classList.add('on');
     const h=document.getElementById('holdings');
     if(h) h.style.display='none';
     return;
+  }
+  if(MODE==='server'&&botTab&&botPane){
+    botTab.style.display='';
+    let saved=null;
+    try{ saved=localStorage.getItem('fma.tab'); }catch(e){}
+    showTab(saved||'bot');       // 로컬에서는 봇 화면이 기본
+  }else{
+    let saved=null;
+    try{ saved=localStorage.getItem('fma.tab'); }catch(e){}
+    // 봇 탭이 없는 빌드에서 예전 선택이 'bot' 이면 빈 화면이 된다
+    showTab(saved&&saved!=='bot'?saved:'holdings');
   }
   if(MODE==='server'){
     try{ const b=await api('/api/brokers'); window.__brokers=b.brokers; }catch(e){}

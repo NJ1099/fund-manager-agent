@@ -104,6 +104,67 @@ def test_기준통화가_빌드에_박힌다(tmp_path, demo_state):
     assert "window.USD" not in html
 
 
+# ------------------------------------------------- 봇 화면 없는 배포본 (--no-bot)
+def test_봇_화면을_빼면_운용_데이터가_파일에_남지_않는다(tmp_path, demo_state):
+    """감추는 것과 빼는 것은 다르다.
+
+    감추기만 하면 운영자의 모의 운용 내역이 파일 안에 그대로 남아서, 소스만 열어보면
+    다 보인다. 공개 배포본에 그게 실릴 이유가 없다.
+    """
+    out = tmp_path / "nobot.html"
+    build_snapshot.build(out, remote=True, include_bot=False)
+    html = out.read_text(encoding="utf-8")
+
+    assert 'id="snapshot-state"' not in html
+    assert str(demo_state["portfolio"]["equity"]) not in html
+    assert 'id="pane-bot"' not in html
+
+
+def test_봇_화면을_빼면_봇_탭도_사라진다(tmp_path, demo_state):
+    """탭만 남으면 눌렀을 때 빈 화면이 나온다."""
+    out = tmp_path / "nobot.html"
+    build_snapshot.build(out, remote=True, include_bot=False)
+    html = out.read_text(encoding="utf-8")
+
+    assert 'data-tab="bot"' not in html
+    assert 'data-tab="holdings"' in html          # 나머지 탭은 남아 있어야 한다
+    assert 'id="pane-howto"' in html
+    assert 'id="pane-about"' in html
+
+
+def test_봇_컨트롤은_닫는_태그까지_함께_사라진다(tmp_path, demo_state):
+    """여는 태그만 남기면 div 가 안 닫혀 뒤 요소가 헤더 안으로 빨려 들어간다.
+
+    실제로 한 번 그렇게 레이아웃이 무너졌다.
+    """
+    out = tmp_path / "nobot.html"
+    build_snapshot.build(out, remote=True, include_bot=False)
+    html = out.read_text(encoding="utf-8")
+
+    assert 'class="controls"' not in html
+    assert 'id="runBtn"' not in html
+    assert html.count("<body>") == html.count("</body>") == 1
+
+
+def test_봇_없는_빌드도_보유_기능은_살아_있다(tmp_path, demo_state):
+    out = tmp_path / "nobot.html"
+    build_snapshot.build(out, remote=True, include_bot=False)
+    html = out.read_text(encoding="utf-8")
+
+    assert "window.__REMOTE__ = true" in html
+    assert 'id="symQ"' in html                    # 검색창
+    assert "/api/search" in html                  # 중계 함수 호출
+
+
+def test_봇_없는_빌드는_상태파일이_없어도_만들어진다(tmp_path, monkeypatch):
+    """공개 배포본은 운영자가 사이클을 한 번도 안 돌렸어도 나와야 한다."""
+    monkeypatch.setattr(config, "STATE_FILE", tmp_path / "없는파일.json")
+    out = tmp_path / "nobot.html"
+
+    build_snapshot.build(out, remote=True, include_bot=False)
+    assert out.exists()
+
+
 # ---------------------------------------------------------- 앵커 어긋남 방어
 def test_앵커를_못_찾으면_조용히_넘어가지_않고_실패한다(tmp_path, demo_state, monkeypatch):
     """가장 위험한 실패는 '깨진 스냅샷이 성공한 척 만들어지는' 것이다."""

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-공개 데모용 대시보드 스냅샷 생성기.
+공개 배포본 빌더.
 
-  python scripts/build_demo.py [출력경로]
+  python scripts/build_demo.py [출력경로]              '내 종목' 전용 (기본, 즉시)
+  python scripts/build_demo.py [출력경로] --with-bot   봇 화면까지 든 스냅샷
+
+기본 동작은 봇 화면 없이 '내 종목' 화면만 굽는 것이다. 운영자의 모의 운용 상태를
+공개할 이유가 없고, 방문자에게 필요한 것은 자기 종목을 넣어보는 화면뿐이다.
+`--with-bot` 은 봇 화면이 든 스냅샷이 필요할 때만 쓴다 (아래 설명 참고).
 
 ■ 왜 합성 데이터를 쓰지 않는가
 
@@ -126,11 +131,13 @@ def build(out_path):
     cycle = agent.run_cycle()
     print(f"  사이클 #{cycle['cycle_no']} 완료 · 자산 ${cycle['equity']:,.0f}")
 
-    # 스냅샷 HTML 생성.
-    # remote=True — 배포본에서 방문자가 '내 보유'에 자기 종목을 넣을 수 있게 한다.
-    # 그 데이터는 방문자 브라우저에만 저장되고 서버로도, 이 저장소로도 오지 않는다.
+    # 공개 배포본 굽기.
+    # remote=True       방문자가 '내 종목'에 자기 종목을 넣을 수 있다. 그 데이터는
+    #                   방문자 브라우저에만 저장되고 서버로도 이 저장소로도 오지 않는다.
+    # include_bot=False 봇 화면을 결과물에서 통째로 뺀다. 운영자의 모의 운용 상태를
+    #                   공개할 이유가 없고, 방문자에게 필요한 것은 자기 종목 화면뿐이다.
     import build_snapshot                          # noqa: E402
-    build_snapshot.build(out_path, remote=True)
+    build_snapshot.build(out_path, remote=True, include_bot=False)
 
     # 데모임을 화면에서 분명히 밝힌다 — 남의 실계좌로 오해하면 안 된다
     html = Path(out_path).read_text(encoding="utf-8")
@@ -159,5 +166,21 @@ def build(out_path):
     print(f"데모 상태 디렉토리: {DEMO_DIR}  (gitignore 대상)")
 
 
+def build_web_only(out_path):
+    """공개 배포본만 굽는다 — 봇 데이터가 필요 없으므로 1초도 안 걸린다.
+
+    배포본에는 봇 화면이 실리지 않으므로(운영자의 운용 상태를 공개할 이유가 없다),
+    백테스트를 돌려 데모 데이터를 만들 이유도 없다.
+    """
+    import build_snapshot                          # noqa: E402
+    build_snapshot.build(out_path, remote=True, include_bot=False)
+    print(f"완료 → {out_path}")
+
+
 if __name__ == "__main__":
-    build(sys.argv[1] if len(sys.argv) > 1 else str(BASE / "public" / "index.html"))
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    out = args[0] if args else str(BASE / "public" / "index.html")
+    if "--with-bot" in sys.argv:
+        build(out)                                 # 봇 화면이 든 스냅샷까지 만든다
+    else:
+        build_web_only(out)

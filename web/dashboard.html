@@ -186,6 +186,39 @@ footer p{margin:0 0 6px}
 .hmsg{font-size:12px;padding:9px 12px;border-radius:8px;margin-top:10px}
 .hmsg.ok{background:rgba(63,176,160,.12);color:#6fd0c0}
 .hmsg.err{background:rgba(224,108,108,.12);color:#e88b8b}
+
+/* ---- 탭 ---- */
+.tabs{display:flex;gap:4px;margin:0 0 18px;border-bottom:1px solid var(--line);
+  flex-wrap:wrap}
+.tabs button{background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--dim);font-family:inherit;font-size:13px;padding:10px 16px;cursor:pointer;
+  border-radius:0;margin-bottom:-1px}
+.tabs button:hover{color:var(--fg,#e6e9ef);background:rgba(255,255,255,.03)}
+.tabs button.on{color:#7fb2f0;border-bottom-color:#4d7fd4}
+.tabpane{display:none}
+.tabpane.on{display:block}
+.doc{max-width:820px;line-height:1.85;font-size:13.5px}
+.doc h3{font-size:15px;margin:26px 0 10px;color:var(--fg,#e6e9ef);font-weight:600}
+.doc h3:first-child{margin-top:4px}
+.doc p{margin:0 0 12px;color:#b9c2ce}
+.doc ol,.doc ul{margin:0 0 14px;padding-left:20px;color:#b9c2ce}
+.doc li{margin:6px 0}
+.doc code{background:rgba(255,255,255,.07);padding:1px 6px;border-radius:4px;
+  font-family:var(--mono,monospace);font-size:12px}
+.doc .k{color:#7fb2f0;font-weight:600}
+.doc table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:12.5px}
+.doc th{text-align:left;color:var(--dim);font-weight:500;padding:7px 10px;
+  border-bottom:1px solid var(--line)}
+.doc td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:#b9c2ce;
+  vertical-align:top}
+.doc .callout{border-left:2px solid #d8a13a;background:rgba(216,161,58,.07);
+  padding:12px 14px;border-radius:0 8px 8px 0;margin:14px 0;color:#e8c377;font-size:12.5px}
+.doc .callout.info{border-left-color:#4d7fd4;background:rgba(77,127,212,.07);color:#a8c6ef}
+.step{display:flex;gap:12px;margin:0 0 14px;align-items:flex-start}
+.step .n{flex:0 0 26px;height:26px;border-radius:50%;background:rgba(77,127,212,.15);
+  color:#7fb2f0;display:flex;align-items:center;justify-content:center;font-size:12px;
+  font-weight:600;font-family:var(--mono,monospace)}
+.step .t{flex:1;color:#b9c2ce}
 </style>
 </head>
 <body>
@@ -206,6 +239,14 @@ footer p{margin:0 0 6px}
     </div>
   </div>
 
+  <div class="tabs" id="tabs">
+    <button data-tab="holdings" class="on">내 종목</button>
+    <button data-tab="howto">사용법</button>
+    <button data-tab="about">소개</button>
+    <button data-tab="bot" id="botTab" style="display:none">봇 대시보드</button>
+  </div>
+
+  <div class="tabpane on" id="pane-holdings">
   <div class="panel" id="holdings" style="margin-bottom:18px">
     <div class="hold-head">
       <div>
@@ -235,8 +276,117 @@ footer p{margin:0 0 6px}
     <div id="holdBody"><div class="empty">보유 종목이 없습니다. 위에서 검색해 추가하거나 증권사에서 가져오세요.</div></div>
     <input type="file" id="csvFile" accept=".csv,.txt" style="display:none">
   </div>
+  </div>
 
+  <div class="tabpane" id="pane-howto">
+    <div class="panel doc">
+      <h3>종목 넣기</h3>
+      <div class="step"><div class="n">1</div><div class="t">
+        맨 위 검색창에 이름을 칩니다. <span class="k">삼성전자</span>,
+        <span class="k">애플</span>, <span class="k">TIGER 미국나스닥100</span>,
+        <span class="k">SPY</span> — 한글·영문·종목코드 모두 됩니다.
+        국내 종목의 코스피/코스닥 구분은 알아서 붙습니다.</div></div>
+      <div class="step"><div class="n">2</div><div class="t">
+        뜨는 목록에서 원하는 종목을 클릭합니다.</div></div>
+      <div class="step"><div class="n">3</div><div class="t">
+        <b>수량</b>을 넣고 <b>추가</b>를 누릅니다.
+        <b>평균단가</b>는 선택인데, 넣으면 손익이 함께 계산됩니다.</div></div>
+
+      <h3>이미 가진 종목을 더 샀다면</h3>
+      <p>같은 종목을 다시 검색해 <b>추가매수</b>를 누르면 수량은 더해지고
+        평단은 가중평균으로 다시 계산됩니다. <b>추가</b>는 기존 내용을 덮어씁니다.</p>
+
+      <h3>지우기</h3>
+      <p>표 오른쪽 <code>✕</code> 를 누르면 그 종목만 사라집니다.
+        전부 지우려면 하나씩 지우거나, 브라우저 사이트 데이터를 비우면 됩니다.</p>
+
+      <h3>내 데이터는 어디에 있나</h3>
+      <div class="callout info">
+        넣은 종목은 <b>지금 쓰는 브라우저에만</b> 저장됩니다(localStorage).
+        서버로 전송되지 않고, 다른 사람에게 보이지 않으며, 다른 기기·다른 브라우저에도
+        넘어가지 않습니다. 폰에서 보려면 폰에서 따로 넣어야 합니다.<br>
+        시크릿 창을 쓰거나 브라우저 데이터를 지우면 목록도 함께 사라집니다.
+      </div>
+
+      <h3>숫자는 언제 갱신되나</h3>
+      <p>종목을 추가하거나 삭제하면 자동으로 다시 계산합니다.
+        시세만 새로 받고 싶으면 오른쪽 위 <b>새로고침</b>을 누르세요.
+        상관·변동성은 지난 1년치 일간 데이터로 계산하므로 몇 초 걸릴 수 있습니다.</p>
+
+      <h3>안 되는 것</h3>
+      <table>
+        <tr><th>항목</th><th>이유</th></tr>
+        <tr><td>모델 견해(Kronos)</td>
+            <td>시계열 모델 추론이 필요합니다. 이 페이지는 정적 호스팅이라 돌릴 수 없고,
+                로컬에서 <code>python server.py</code> 로 띄우면 나옵니다</td></tr>
+        <tr><td>증권사 연동 · CSV 가져오기</td>
+            <td>계좌 자격증명을 다루므로 로컬 실행에서만 제공합니다</td></tr>
+        <tr><td>매수 · 매도</td>
+            <td>이 프로그램에는 주문 기능이 아예 없습니다. 설계상 그렇습니다</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="tabpane" id="pane-about">
+    <div class="panel doc">
+      <h3>이게 뭔가요</h3>
+      <p>오픈소스 세 개(<b>Kronos</b> 시계열 예측, <b>skfolio</b> 포트폴리오 최적화,
+        <b>NautilusTrader</b> 주문 도메인)를 엮어 만든 <b>모의투자 에이전트</b>의
+        공개 화면입니다. 이 페이지에서는 그중 <b>보유 종목 진단</b> 부분을 쓸 수 있습니다.</p>
+      <p>가진 종목을 넣으면 실제 시세로 평가액·비중·손익을 계산하고,
+        <b>포트폴리오가 실제로 분산되어 있는지</b>를 숫자로 보여줍니다.</p>
+
+      <h3>지표 읽는 법</h3>
+      <table>
+        <tr><th>지표</th><th>무엇을 말하나</th></tr>
+        <tr><td><b>집중도</b></td>
+            <td>가장 큰 종목이 차지하는 비중. 35%를 넘으면 경고를 띄웁니다</td></tr>
+        <tr><td><b>유효 종목 수</b></td>
+            <td>비중 쏠림을 감안한 실질 종목 수(허핀달 지수의 역수).
+                10종목을 가졌어도 한 종목이 90%면 <b>사실상 1종목</b>입니다</td></tr>
+        <tr><td><b>평균 상관</b></td>
+            <td>보유 종목들이 같이 움직이는 정도. 0.7을 넘으면 종목 수를 늘려도
+                위험이 잘 줄지 않습니다 — 분산은 <b>개수가 아니라 상관</b>의 문제입니다</td></tr>
+        <tr><td><b>연변동성</b></td>
+            <td>포트폴리오 전체가 1년에 얼마나 출렁이는지(연율 표준편차)</td></tr>
+        <tr><td><b>분산 효과</b></td>
+            <td>종목별 변동성을 비중대로 평균낸 값보다 포트폴리오 변동성이 얼마나
+                낮은지. 이 차이가 분산으로 실제로 얻은 몫입니다</td></tr>
+        <tr><td><b>통화 노출</b></td>
+            <td>해외 종목 비중. 원화로 볼 때 <b>환율에도 함께 걸려 있다</b>는 뜻입니다</td></tr>
+      </table>
+
+      <h3>로컬에서 돌리면 더 되는 것</h3>
+      <ul>
+        <li><b>모델 견해</b> — 종목마다 5거래일 기대수익과 확신도를 뽑습니다</li>
+        <li><b>봇 대시보드</b> — 모의 포트폴리오를 자동 운용하고 SPY와 성과를 비교합니다</li>
+        <li><b>백테스트</b> — 과거 구간을 리플레이해 전략을 검증합니다</li>
+        <li><b>증권사 연동</b> — 토스증권·한국투자증권에서 잔고를 가져옵니다(조회 전용)</li>
+      </ul>
+      <p>설치 방법은 저장소에 있습니다 —
+        <a href="https://github.com/NJ1099/fund-manager-agent" style="color:#7fb2f0"
+           target="_blank" rel="noopener">github.com/NJ1099/fund-manager-agent</a></p>
+
+      <h3>꼭 알아두실 것</h3>
+      <div class="callout">
+        <b>투자 조언이 아닙니다.</b> 여기 나오는 어떤 숫자도 매수·매도 권유가 아닙니다.<br><br>
+        <b>주문 기능이 없습니다.</b> 이 프로그램은 어떤 증권사로도 주문을 보내지 않습니다.
+        코드에 그 경로 자체가 없습니다.<br><br>
+        <b>예측 모델은 검증되지 않았습니다.</b> 원저자의 독립 평가에서 이 모델은 무작위
+        걷기와 통계적으로 구분되지 않았습니다. 모델 견해는 참고 이상으로 쓰지 마세요.
+        반면 집중도·상관·변동성 같은 진단은 <b>예측이 아니라 사실</b>이므로 그대로 믿어도
+        됩니다.<br><br>
+        <b>시세는 지연될 수 있습니다.</b> 무료 공개 데이터를 씁니다.
+      </div>
+
+      <h3>만든 것</h3>
+      <p>MIT 라이선스 오픈소스입니다. 코드·이슈·개선 제안 모두 저장소에서 받습니다.</p>
+    </div>
+  </div>
+
+  <div class="tabpane" id="pane-bot">
   <div id="root"><div class="loading">에이전트 상태를 불러오는 중…</div></div>
+  </div>
 </div>
 
 <script>
@@ -246,6 +396,24 @@ const c=t=>COLORS[t]||'#7b8794';
 const usd=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=v=>(v>=0?'+':'')+v.toFixed(2)+'%';
 let polling=null;
+
+/* ---- 탭 전환 ----
+   봇 대시보드 탭은 로컬 서버 모드에서만 나온다. 정적 배포본에는 봇 화면 자체가
+   빌드에 실리지 않으므로(개인 데모 데이터를 공개하지 않기 위해서이기도 하다)
+   탭을 띄워봐야 빈 화면만 보인다. */
+function showTab(name){
+  document.querySelectorAll('.tabpane').forEach(p=>{
+    p.classList.toggle('on', p.id === 'pane-' + name);
+  });
+  document.querySelectorAll('#tabs button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.tab === name);
+  });
+  try{ localStorage.setItem('fma.tab', name); }catch(e){}
+}
+document.getElementById('tabs').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-tab]');
+  if (b && b.style.display !== 'none') showTab(b.dataset.tab);
+});
 
 async function load(){
   try{
@@ -508,8 +676,12 @@ function render(s){
     </footer>`;
 }
 
-document.getElementById('refreshBtn').onclick=load;
-document.getElementById('pmBtn').onclick=async function(){
+// 봇 컨트롤은 '내 종목' 전용 빌드에는 DOM 자체가 없다 (봇 화면을 들어내므로).
+// 없는 버튼에 핸들러를 걸다 죽으면 그 아래 스크립트가 통째로 멈춘다.
+const _refreshBtn=document.getElementById('refreshBtn');
+if(_refreshBtn) _refreshBtn.onclick=load;
+const _pmBtn=document.getElementById('pmBtn');
+if(_pmBtn) _pmBtn.onclick=async function(){
   const label=this.textContent;
   this.disabled=true; this.textContent='LLM 호출 중…';
   try{
@@ -529,7 +701,8 @@ document.getElementById('pmBtn').onclick=async function(){
   }
   this.disabled=false; this.textContent=label;
 };
-document.getElementById('runBtn').onclick=async function(){
+const _runBtn=document.getElementById('runBtn');
+if(_runBtn) _runBtn.onclick=async function(){
   this.disabled=true; this.textContent='실행 중…';
   try{
     await fetch('/api/run-cycle',{method:'POST'});
@@ -1098,10 +1271,30 @@ async function startAnalysis(){
 
 /* ---------------- 시작 ---------------- */
 (async()=>{
+  // 탭 구성은 모드마다 다르다.
+  //   snapshot : 봇 화면만 보여준다 (공유·보관용 스냅샷의 원래 용도)
+  //   remote   : 봇 화면이 빌드에 없다 → '내 종목' 중심
+  //   server   : 전부. 봇을 실제로 돌리는 환경이므로 봇 탭도 켠다
+  const botPane=document.getElementById('pane-bot');
+  const botTab=document.getElementById('botTab');
   if(MODE==='snapshot'){
+    document.getElementById('tabs').style.display='none';
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('on'));
+    if(botPane) botPane.classList.add('on');
     const h=document.getElementById('holdings');
     if(h) h.style.display='none';
     return;
+  }
+  if(MODE==='server'&&botTab&&botPane){
+    botTab.style.display='';
+    let saved=null;
+    try{ saved=localStorage.getItem('fma.tab'); }catch(e){}
+    showTab(saved||'bot');       // 로컬에서는 봇 화면이 기본
+  }else{
+    let saved=null;
+    try{ saved=localStorage.getItem('fma.tab'); }catch(e){}
+    // 봇 탭이 없는 빌드에서 예전 선택이 'bot' 이면 빈 화면이 된다
+    showTab(saved&&saved!=='bot'?saved:'holdings');
   }
   if(MODE==='server'){
     try{ const b=await api('/api/brokers'); window.__brokers=b.brokers; }catch(e){}
