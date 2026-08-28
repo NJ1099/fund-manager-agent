@@ -56,6 +56,8 @@ window.__BASE_CCY__ = "__BASE_CCY__";
 POLL_ANCHOR = "load();\npolling=setInterval(load,15000);"
 ROOT_ANCHOR = '<div id="root">'
 SUB_ANCHOR = '<div class="sub">Kronos · skfolio · NautilusTrader · PM 감독</div>'
+# 시장 브리핑을 심는 자리. 봇 화면을 뺀 빌드에서도 남아 있어야 하므로 탭 바를 쓴다.
+TABS_ANCHOR = '<div class="tabs" id="tabs">'
 
 
 def _replace_once(html, old, new, what):
@@ -110,6 +112,63 @@ def _strip_bot(html):
     return html
 
 
+def _embed_macro(html, macro_path=None):
+    """시장 브리핑을 문서에 구워 넣는다.
+
+    보유 종목과 달리 **시장 데이터는 공개해도 되는 값**이다(운영자 개인정보가 아니다).
+    그래서 배포본에도 실어서, 서버가 없는 곳에서도 지표·코멘트·대응을 볼 수 있게 한다.
+    갱신 버튼은 대시보드 쪽에서 `window.__MACRO__` 를 보고 알아서 감춘다.
+
+    파일이 없으면 아무것도 심지 않는다 — 그 경우 화면이 탭 자체를 없앤다.
+    """
+    path = macro_path or (config.STATE_DIR / "macro.json")
+    if not path.exists():
+        print("  (시장 브리핑 없음 — 탭이 빠집니다. `python scripts/macro.py --save` 로 만드세요)")
+        return html
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.pop("running", None)           # 실행 중 플래그는 정적 파일에서 뜻이 없다
+    payload = json.dumps(data, ensure_ascii=False)
+    print(f"  시장 브리핑 임베드: {len(payload):,} bytes "
+          f"(기준 {data.get('macro', {}).get('asof')})")
+    # 앵커로 탭 바를 쓴다. `<div id="root">` 는 --no-bot 빌드에서 `_strip_bot` 이
+    # 통째로 들어내므로 여기서는 쓸 수 없다 (봇 화면 안에 들어 있다).
+    return _replace_once(
+        html, TABS_ANCHOR,
+        '<script id="macro-data" type="application/json">' + payload + '</script>'
+        + chr(10) + '  <script>window.__MACRO__ = JSON.parse('
+        'document.getElementById("macro-data").textContent);</script>'
+        + chr(10) + '  ' + TABS_ANCHOR,
+        "탭 바(매크로 삽입 지점)",
+    )
+
+
+def _embed_scorecard(html, path=None):
+    """모델 성적표를 문서에 구워 넣는다.
+
+    **성적이 나쁘다고 빼지 않는다.** 이 프로젝트가 공개된 채로 유지되려면 예측력이
+    검증되지 않았다는 사실이 화면에 남아 있어야 한다 — 소개 탭의 면책 문구가
+    이 표를 근거로 삼는다.
+    """
+    path = path or (config.STATE_DIR / "scorecard.json")
+    if not path.exists():
+        print("  (모델 성적표 없음 — `python scripts/validate.py --save-state` 로 만드세요)")
+        return html
+    data = json.loads(path.read_text(encoding="utf-8"))
+    # 화면에 안 쓰는 큰 배열은 뺀다 (기간별 IC 시계열은 표에 나오지 않는다)
+    if isinstance(data.get("ic"), dict):
+        data["ic"].pop("series", None)
+    payload = json.dumps(data, ensure_ascii=False)
+    print(f"  모델 성적표 임베드: {len(payload):,} bytes (표본 {data.get('n')}건)")
+    return _replace_once(
+        html, TABS_ANCHOR,
+        '<script id="scorecard-data" type="application/json">' + payload + '</script>'
+        + chr(10) + '  <script>window.__SCORECARD__ = JSON.parse('
+        'document.getElementById("scorecard-data").textContent);</script>'
+        + chr(10) + '  ' + TABS_ANCHOR,
+        "탭 바(성적표 삽입 지점)",
+    )
+
+
 def build(out_path, remote=False, base_currency=None, include_bot=True):
     """대시보드를 단일 HTML 로 굽는다.
 
@@ -129,6 +188,8 @@ def build(out_path, remote=False, base_currency=None, include_bot=True):
                 .replace('"__BASE_CCY__"', '"' + ccy + '"'))
         html = _strip_bot(html)
         html = _replace_once(html, POLL_ANCHOR, stub + "\nload();", "폴링 시작 지점")
+        html = _embed_macro(html)
+        html = _embed_scorecard(html)
         Path(out_path).write_text(html, encoding="utf-8")
         print(f"저장: {out_path}  ({len(html):,} bytes, 봇 화면 없음)")
         return
@@ -146,6 +207,9 @@ def build(out_path, remote=False, base_currency=None, include_bot=True):
     )
     # 폴링/실행 버튼을 스냅샷 동작으로 교체
     html = _replace_once(html, POLL_ANCHOR, stub + "\nload();", "폴링 시작 지점")
+    html = _embed_macro(html)
+    html = _embed_scorecard(html)
+
     # 배지에 스냅샷 표시
     html = _replace_once(
         html, SUB_ANCHOR,

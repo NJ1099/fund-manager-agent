@@ -29,7 +29,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from core import config, holdings_api, storage
+from core import config, holdings_api, macro_api, storage
 
 # 한국어 로그가 Windows 기본 콘솔(cp949)에서 깨지지 않게 UTF-8 로 고정한다.
 for _stream in (sys.stdout, sys.stderr):
@@ -167,6 +167,20 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/api/brokers"):
             self._json(*holdings_api.brokers_status())
 
+        elif self.path.startswith("/api/scorecard"):
+            # 모델 성적표. 채점은 `scripts/validate.py` 가 미리 해두고 여기서는 읽기만 한다
+            # (전 종목 과거 시세를 다시 받아야 해서 요청 안에서 하기엔 무겁다).
+            f = config.STATE_DIR / "scorecard.json"
+            if not f.exists():
+                self._json(404, {"error": "성적표가 아직 없습니다. "
+                                          "`python scripts/validate.py --save-state` 를 실행하세요"})
+            else:
+                self._json(200, storage.read_json(f))
+
+        elif self.path.startswith("/api/macro"):
+            # 저장된 브리핑을 읽기만 한다. 수집은 POST /api/macro/refresh 에서만.
+            self._json(*macro_api.get())
+
         elif self.path in ("/", "/index.html"):
             page = config.WEB_DIR / "dashboard.html"
             if not page.exists():
@@ -195,6 +209,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200 if ok else 400, json.dumps(
                 {"ok": ok, "message": message,
                  "llm_calls": (state or {}).get("llm_calls")}, ensure_ascii=False))
+
+        elif self.path.startswith("/api/macro/refresh"):
+            # 외부 시세·RSS 를 새로 받는다. LLM 을 부르지 않으므로 비용은 0원이다.
+            self._json(*macro_api.refresh())
 
         elif self.path.startswith("/api/holdings/analyze"):
             self._json(*holdings_api.start_analysis())

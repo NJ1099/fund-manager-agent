@@ -197,6 +197,51 @@ footer p{margin:0 0 6px}
 .tabs button.on{color:#7fb2f0;border-bottom-color:#4d7fd4}
 .tabpane{display:none}
 .tabpane.on{display:block}
+
+/* ---- 시장 브리핑 ---- */
+.mtopic{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:16px 18px;margin-bottom:14px}
+.mtopic .mhead{display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.mtopic .mname{font-family:var(--disp);font-size:15px;font-weight:600}
+.mbias{font-size:10.5px;letter-spacing:.05em;padding:3px 9px;border-radius:3px;
+  border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.mbias.up{background:rgba(79,191,122,.1);color:var(--pos);border-color:rgba(79,191,122,.3)}
+.mbias.down{background:rgba(224,112,108,.1);color:var(--neg);border-color:rgba(224,112,108,.3)}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.mrow{background:var(--panel2);border-radius:7px;padding:9px 11px;border:1px solid var(--line2)}
+.mrow .mr1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mrow .ml{font-size:12px;color:#c3ccd8}
+.mrow .mv{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.mrow .md{font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.6}
+.mrow .mt{font-size:10px;color:var(--muted);margin-top:5px}
+.mtag{display:inline-block;font-size:9.5px;padding:1px 6px;border-radius:3px;margin-right:4px;
+  background:rgba(255,255,255,.06);color:var(--muted)}
+.mtag.hot{background:rgba(224,112,108,.14);color:#e8918d}
+.mtag.cold{background:rgba(109,143,212,.14);color:#8fb0e8}
+.mtag.warn{background:rgba(216,161,58,.14);color:#e8c377}
+.msec{margin-top:14px}
+.msec h4{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);
+  margin:0 0 7px;font-weight:600}
+.mcomment{font-size:12.5px;line-height:1.85;color:#b9c2ce}
+.mwatch{font-size:12px;line-height:1.8;color:#b9c2ce;margin:0;padding-left:18px}
+.mwatch li{margin:4px 0}
+.maction{border-left:2px solid #4d7fd4;background:rgba(77,127,212,.05);
+  padding:10px 13px;border-radius:0 7px 7px 0;margin-bottom:9px}
+.maction .mw{font-size:12.5px;font-weight:600;color:#a8c4ee;margin-bottom:5px}
+.maction .mwhy,.maction .mrisk{font-size:11.5px;line-height:1.7;color:#9aa6b4}
+.maction .mrisk{color:#c9a86a;margin-top:4px}
+.mnews{font-size:11.5px;line-height:1.7}
+.mnews a{color:#8fb0e8;text-decoration:none}
+.mnews a:hover{text-decoration:underline}
+.mnews .msrc{color:var(--dim);font-size:10.5px;margin-right:5px}
+.msummary{background:rgba(77,127,212,.07);border:1px solid rgba(77,127,212,.2);
+  border-radius:8px;padding:12px 15px;font-size:12.5px;line-height:1.8;
+  color:#b9c2ce;margin-bottom:16px}
+@media (max-width:720px){
+  .mgrid{grid-template-columns:1fr}
+  .mtopic{padding:14px}
+}
 .doc{max-width:820px;line-height:1.85;font-size:13.5px}
 .doc h3{font-size:15px;margin:26px 0 10px;color:var(--fg,#e6e9ef);font-weight:600}
 .doc h3:first-child{margin-top:4px}
@@ -297,6 +342,7 @@ footer p{margin:0 0 6px}
 
   <div class="tabs" id="tabs">
     <button data-tab="holdings" class="on">내 종목</button>
+    <button data-tab="macro">시장 브리핑</button>
     <button data-tab="howto">사용법</button>
     <button data-tab="about">소개</button>
     <button data-tab="bot" id="botTab" style="display:none">봇 대시보드</button>
@@ -429,15 +475,41 @@ footer p{margin:0 0 6px}
         <b>주문 기능이 없습니다.</b> 이 프로그램은 어떤 증권사로도 주문을 보내지 않습니다.
         코드에 그 경로 자체가 없습니다.<br><br>
         <b>예측 모델은 검증되지 않았습니다.</b> 원저자의 독립 평가에서 이 모델은 무작위
-        걷기와 통계적으로 구분되지 않았습니다. 모델 견해는 참고 이상으로 쓰지 마세요.
+        걷기와 통계적으로 구분되지 않았고, <b>우리 데이터로 직접 채점해도 같았습니다</b>
+        (아래 성적표). 모델 견해는 참고 이상으로 쓰지 마세요.
         반면 집중도·상관·변동성 같은 진단은 <b>예측이 아니라 사실</b>이므로 그대로 믿어도
         됩니다.<br><br>
         <b>시세는 지연될 수 있습니다.</b> 무료 공개 데이터를 씁니다.
       </div>
 
+      <h3>모델 성적표 — 견해가 실제로 맞았는가</h3>
+      <p>이 시스템은 “확신도가 높으면 더 크게 베팅한다”는 가정 위에 서 있습니다.
+        그 가정이 맞는지 확인하려고, 과거 예측을 5거래일 뒤 실제 가격과 하나씩 대조했습니다.
+        <b>좋게 나오지 않았고, 그 사실을 감추지 않습니다.</b></p>
+      <div id="scorecard"><p class="note">성적표가 아직 만들어지지 않았습니다
+        (<code>python scripts/validate.py --save-state</code>).</p></div>
+
       <h3>만든 것</h3>
       <p>MIT 라이선스 오픈소스입니다. 코드·이슈·개선 제안 모두 저장소에서 받습니다.</p>
     </div>
+  </div>
+
+  <div class="tabpane" id="pane-macro">
+    <div class="panel" style="margin-bottom:18px">
+      <div class="hold-head">
+        <div>
+          <div class="title">시장 브리핑</div>
+          <div class="note" style="margin-top:2px">주식·금리·달러·에너지·금속·크립토·신용을
+            같은 방식으로 재고, 주제마다 코멘트와 대응 후보를 붙입니다 —
+            <b>지표는 계산된 사실이고, 전망은 예측이 아니라 조건문입니다</b></div>
+        </div>
+        <div class="hold-actions">
+          <button id="macroBtn">지표 갱신</button>
+        </div>
+      </div>
+      <div id="macroMeta" class="note" style="margin-top:10px">—</div>
+    </div>
+    <div id="macroBody"><div class="loading">—</div></div>
   </div>
 
   <div class="tabpane" id="pane-bot">
@@ -1339,6 +1411,176 @@ async function startAnalysis(){
   }
 }
 
+/* ---------------- 모델 성적표 ----------------
+   이 시스템의 핵심 가정("확신도가 높으면 더 크게 베팅해도 된다")을 실제 결과로 채점한 것.
+   성적이 나쁘게 나와도 그대로 보여준다 — 검증하지 않은 예측력으로 베팅 크기를 정하는 것보다
+   "근거가 없다"를 아는 편이 낫다. 표본이 부족하면 숫자 대신 그 사실을 표시한다. */
+function renderScorecard(g){
+  const el=document.getElementById('scorecard');
+  if(!el) return;
+  if(!g||!g.n){ el.innerHTML='<p class="note">아직 대조할 예측이 없습니다.</p>'; return; }
+  const P=v=>v==null?'—':(v*100).toFixed(1)+'%';
+  if(!g.sufficient){
+    el.innerHTML=`<p class="note">표본 ${g.n}건 — ${g.min_samples}건 미만이라
+      지표를 내지 않습니다. 적은 표본의 적중률은 정보가 아니라 잡음입니다.</p>`;
+    return;
+  }
+  const d=g.direction, ic=g.ic, bc=g.by_confidence, cal=g.calibration, br=g.brier;
+  const bins=(bc.bins||[]).map(b=>`<tr><td>${esc(b.label)}</td><td>${b.n}건</td>
+      <td>${P(b.hit_rate)}</td><td>${b.mean_actual_pct.toFixed(2)}%</td></tr>`).join('');
+  el.innerHTML=`
+    <p class="note">표본 ${g.n}건 · 종목 ${g.tickers.length}개 ·
+      ${esc(g.period?g.period[0]+' ~ '+g.period[1]:'')} · 예측 지평 ${g.realize?g.realize.horizon:5}거래일</p>
+    <table>
+      <tr><th>재는 것</th><th>결과</th><th>뜻</th></tr>
+      <tr><td>방향 적중률</td><td>${P(d.rate)}</td>
+        <td>“늘 상승”으로 찍었을 때 ${P(d.naive_always_up)} —
+          ${d.beats_naive?'기준선을 넘었습니다':'<b>기준선을 넘지 못했습니다</b>'}</td></tr>
+      <tr><td>IC(순위상관)</td><td>${ic.insufficient?'—':ic.mean.toFixed(3)}</td>
+        <td>${ic.insufficient?'기간 부족':
+          `t=${ic.t_stat} — ${Math.abs(ic.t_stat)>=2?'유의':'<b>0과 구분되지 않습니다</b>'}`}</td></tr>
+      <tr><td>확신도–적중 상관</td><td>${bc.conf_vs_hit_corr==null?'—':bc.conf_vs_hit_corr.toFixed(3)}</td>
+        <td>${Math.abs(bc.conf_vs_hit_corr||0)<0.05
+          ?'<b>확신도와 적중률에 관계가 없습니다</b>':'관계가 관찰됩니다'}</td></tr>
+      <tr><td>팬차트 커버리지</td><td>${cal.insufficient?'—':P(cal.coverage)}</td>
+        <td>${cal.insufficient?'표본 부족':'목표 90% · '+esc(cal.verdict)}</td></tr>
+      <tr><td>Brier 스킬</td><td>${br.insufficient?'—':br.skill.toFixed(3)}</td>
+        <td>${br.insufficient?'표본 부족':
+          (br.better_than_baseline?'상수 예측보다 낫습니다':'<b>상수 예측보다 낫지 않습니다</b>')}</td></tr>
+    </table>
+    <p><b>확신도 구간별 적중률</b> — 이 표가 핵심입니다. 확신도가 높은 구간이
+      실제로 더 맞아야 “확신도로 베팅 크기를 정한다”가 성립합니다.</p>
+    <table><tr><th>확신도</th><th>표본</th><th>적중률</th><th>평균 실제 수익</th></tr>${bins}</table>
+    ${g.confidence_proxy&&!g.confidence_proxy.insufficient?`
+      <p class="note">확신도와 실현변동성의 상관은
+        ${g.confidence_proxy.vs_realized_vol.toFixed(3)}입니다 —
+        ${esc(g.confidence_proxy.note)}.</p>`:''}
+    <div class="callout">${esc(g.verdict)}</div>`;
+}
+
+/* ---------------- 시장 브리핑 ----------------
+   지표는 사실, 코멘트는 해석, 전망은 조건문. 화면에서도 이 셋을 섞지 않는다.
+   렌더는 서버가 준 JSON 을 그대로 그리며, 없는 값은 '—' 로 둔다(0 으로 채우지 않는다). */
+let MACRO=null, macroTimer=null;
+
+const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>(
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* 코멘트에 쓰인 **강조** 만 태그로 바꾼다. 그 외 입력은 전부 이스케이프된 뒤라 안전하다. */
+const emph=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b style="color:#d7dee8">$1</b>');
+
+const TAGCLASS={'과열':'hot','52주 상단':'warn','52주 하단':'cold','과매도':'cold',
+  '약세장':'hot','조정':'warn','변동성 확대':'warn','금리차 역전':'hot'};
+
+function macroTags(tags){
+  if(!tags||!tags.length) return '';
+  return tags.map(t=>`<span class="mtag ${TAGCLASS[t]||''}">${esc(t)}</span>`).join('');
+}
+
+function renderMacro(){
+  const meta=document.getElementById('macroMeta');
+  const body=document.getElementById('macroBody');
+  if(!MACRO){ body.innerHTML='<div class="loading">—</div>'; return; }
+
+  if(MACRO.empty){
+    meta.textContent=MACRO.message||'데이터 없음';
+    body.innerHTML='<div class="loading">'+esc(MACRO.message||'')+'</div>';
+    return;
+  }
+
+  const m=MACRO.macro||{}, n=MACRO.news, b=MACRO.brief||{};
+  const bits=[];
+  bits.push(`시세 기준 ${esc(m.asof||'—')} · 지표 ${m.count||0}개`);
+  if(n) bits.push(`뉴스 ${n.count||0}건 (소스 ${n.sources_ok}/${n.sources_total})`);
+  if(MACRO.age_minutes!=null)
+    bits.push(`${MACRO.age_minutes<1?'방금':Math.round(MACRO.age_minutes)+'분 전'} 수집`);
+  if(MACRO.stale) bits.push('<b style="color:#e8c377">오래된 데이터입니다 — 갱신하세요</b>');
+  if(MACRO.running) bits.push('<b style="color:#7fb2f0">갱신 중…</b>');
+  if((m.failed||[]).length) bits.push(`시세 실패: ${esc(m.failed.join(', '))}`);
+  if(MACRO.error) bits.push(`<b style="color:#e88b8b">직전 갱신 실패: ${esc(MACRO.error)}</b>`);
+  meta.innerHTML=bits.join(' · ');
+
+  const H=[];
+  if(b.summary) H.push(`<div class="msummary">${emph(b.summary)}</div>`);
+
+  for(const t of (b.briefs||[])){
+    const bias=t.outlook&&t.outlook.bias||'';
+    const bc=bias.includes('상방')?'up':bias.includes('하방')?'down':'';
+    const rows=(t.facts||[]).map(f=>`
+      <div class="mrow">
+        <div class="mr1"><span class="ml">${esc(f.label)}</span>
+          <span class="mv">${esc(f.value)}</span></div>
+        <div class="md">${esc(f.detail)}</div>
+        <div class="mt">${esc(f.trend||'')} ${macroTags(f.tags)}</div>
+      </div>`).join('');
+
+    const watch=(t.outlook&&t.outlook.watch||[]).map(w=>`<li>${emph(w)}</li>`).join('');
+    const acts=(t.actions||[]).map(a=>`
+      <div class="maction">
+        <div class="mw">${esc(a.what)}</div>
+        <div class="mwhy">근거 · ${esc(a.why)}</div>
+        <div class="mrisk">대가 · ${esc(a.risk)}</div>
+      </div>`).join('');
+    const news=(t.news||[]).map(a=>`
+      <div style="margin:5px 0"><span class="msrc">${esc(a.source)}</span>${
+        a.link?`<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>`
+             :esc(a.title)}</div>`).join('');
+
+    H.push(`
+      <div class="mtopic">
+        <div class="mhead">
+          <div class="mname">${esc(t.label)}</div>
+          <div class="mbias ${bc}">${esc(bias)}</div>
+        </div>
+        <div class="mgrid">${rows}</div>
+        ${t.comment?`<div class="msec"><h4>코멘트</h4>
+          <div class="mcomment">${emph(t.comment)}</div></div>`:''}
+        ${watch?`<div class="msec"><h4>무엇을 지켜볼 것인가</h4>
+          <ul class="mwatch">${watch}</ul>
+          <div class="note" style="margin-top:6px">${
+            esc(t.outlook.disclaimer||'')}</div></div>`:''}
+        ${acts?`<div class="msec"><h4>대응 후보</h4>${acts}</div>`:''}
+        ${news?`<div class="msec"><h4>관련 뉴스</h4><div class="mnews">${news}</div></div>`:''}
+      </div>`);
+  }
+
+  H.push(`<div class="note" style="margin-top:6px;line-height:1.9">
+    지표는 계산된 사실이고, 코멘트와 대응은 이 프로젝트의 규칙이 만든 해석입니다.
+    전망은 예측이 아니라 조건문으로 적혀 있습니다 —
+    <b>이 프로젝트의 예측 모델은 검증 결과 방향 적중률이 기준선에 못 미쳤습니다.</b>
+    투자 판단과 그 결과는 본인 책임입니다. 뉴스는 원문 제목을 그대로 싣습니다(요약하지 않습니다).
+  </div>`);
+  body.innerHTML=H.join('');
+}
+
+async function loadMacro(){
+  try{
+    MACRO=await api('/api/macro');
+    renderMacro();
+    // 갱신이 도는 동안만 짧게 폴링한다. 끝나면 멈춘다 — 상시 폴링은 하지 않는다.
+    if(MACRO.running){
+      if(!macroTimer) macroTimer=setInterval(loadMacro,4000);
+    }else if(macroTimer){
+      clearInterval(macroTimer); macroTimer=null;
+      const btn=document.getElementById('macroBtn');
+      if(btn){ btn.disabled=false; btn.textContent='지표 갱신'; }
+    }
+  }catch(e){
+    document.getElementById('macroMeta').textContent='시장 데이터를 불러오지 못했습니다: '+e.message;
+  }
+}
+
+async function refreshMacro(){
+  const btn=document.getElementById('macroBtn');
+  btn.disabled=true; btn.textContent='받는 중…';
+  try{
+    await api('/api/macro/refresh',{method:'POST'});
+    if(!macroTimer) macroTimer=setInterval(loadMacro,4000);
+  }catch(e){
+    btn.disabled=false; btn.textContent='지표 갱신';
+    document.getElementById('macroMeta').textContent='갱신 실패: '+e.message;
+  }
+}
+
 /* ---------------- 시작 ---------------- */
 (async()=>{
   // 탭 구성은 모드마다 다르다.
@@ -1368,6 +1610,35 @@ async function startAnalysis(){
   }
   if(MODE==='server'){
     try{ const b=await api('/api/brokers'); window.__brokers=b.brokers; }catch(e){}
+  }
+
+  /* 시장 브리핑 —
+       server : 버튼으로 갱신하고 서버가 받아온다
+       remote/snapshot : 빌드 시점에 구워 넣은 스냅샷을 보여주고 갱신 버튼은 감춘다
+                         (개인 보유와 달리 시장 데이터는 공개해도 되는 값이다)
+       그것도 없으면 탭 자체를 없앤다 — 눌러서 빈 화면을 보는 것보다 낫다 */
+  /* 모델 성적표 — 로컬은 API, 배포본은 빌드 때 구워 넣은 값을 쓴다.
+     둘 다 없으면 안내 문구가 그대로 남는다(빈 표를 지어내지 않는다). */
+  if(window.__SCORECARD__){
+    renderScorecard(window.__SCORECARD__);
+  }else if(MODE==='server'){
+    try{ renderScorecard(await api('/api/scorecard')); }catch(e){}
+  }
+
+  const macroBtn=document.getElementById('macroBtn');
+  const macroTabBtn=document.querySelector('#tabs button[data-tab="macro"]');
+  if(MODE==='server'){
+    if(macroBtn) macroBtn.onclick=refreshMacro;
+    loadMacro();
+  }else if(window.__MACRO__){
+    if(macroBtn) macroBtn.style.display='none';
+    MACRO=window.__MACRO__;
+    renderMacro();
+  }else{
+    if(macroTabBtn) macroTabBtn.style.display='none';
+    const mp=document.getElementById('pane-macro');
+    if(mp) mp.remove();
+    if(document.querySelector('#tabs button[data-tab="macro"].on')) showTab('holdings');
   }
   await loadHoldings();
   if(window.__brokers&&HOLD){ HOLD.brokers=window.__brokers; renderHoldings(); }

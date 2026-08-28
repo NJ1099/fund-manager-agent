@@ -177,3 +177,73 @@ def test_실패한_빌드는_안내_문구를_준다(tmp_path, demo_state, monke
     monkeypatch.setattr(build_snapshot, "ROOT_ANCHOR", "<div id='없음'>")
     with pytest.raises(RuntimeError, match="build_snapshot.py 의 앵커도 같이 고치세요"):
         build_snapshot.build(tmp_path / "snap.html")
+
+
+# ------------------------------------------------ 시장 브리핑 · 모델 성적표 임베드
+@pytest.fixture
+def macro_state(tmp_path, monkeypatch):
+    """시장 브리핑·성적표 파일을 임시 디렉토리에 놓는다.
+
+    이 픽스처가 없으면 빌더가 실제 `state/` 를 읽어서, 테스트 결과가 개발 머신에
+    무엇이 저장돼 있느냐에 따라 달라진다.
+    """
+    d = tmp_path / "state"
+    d.mkdir()
+    (d / "macro.json").write_text(json.dumps({
+        "collected_at": "2026-08-28T06:00:00+00:00",
+        "macro": {"asof": "2026-08-28", "count": 27, "assets": {}, "cross": []},
+        "news": {"count": 5},
+        "brief": {"summary": "테스트 요약", "briefs": []},
+    }, ensure_ascii=False), encoding="utf-8")
+    (d / "scorecard.json").write_text(json.dumps({
+        "n": 1400, "sufficient": True, "verdict": "테스트 결론",
+        "ic": {"mean": -0.003, "series": [{"asof": "x", "ic": 0.1}]},
+    }, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(config, "STATE_DIR", d)
+    return d
+
+
+def test_시장_브리핑이_배포본에_실린다(tmp_path, demo_state, macro_state):
+    """시장 데이터는 운영자 개인정보가 아니므로 배포본에 실어도 된다 —
+    서버가 없는 곳에서도 지표와 코멘트를 볼 수 있게 하는 것이 목적이다."""
+    html = build(tmp_path)
+    assert 'id="macro-data"' in html
+    assert "window.__MACRO__" in html
+    assert "테스트 요약" in html
+
+
+def test_봇을_뺀_빌드에도_시장_브리핑이_실린다(tmp_path, demo_state, macro_state):
+    """회귀 고정 — 삽입 앵커로 `<div id="root">` 를 쓰면 안 된다.
+    그건 봇 화면 안에 있어서 `--no-bot` 빌드에서 통째로 사라지고,
+    빌드가 '앵커를 못 찾았다'로 실패한다."""
+    out = tmp_path / "nobot.html"
+    build_snapshot.build(out, remote=True, include_bot=False)
+    html = out.read_text(encoding="utf-8")
+    assert 'id="macro-data"' in html
+    assert 'id="scorecard-data"' in html
+
+
+def test_모델_성적표가_배포본에_실린다(tmp_path, demo_state, macro_state):
+    """성적이 나쁘다고 빼지 않는다 — 소개 탭의 면책 문구가 이 표를 근거로 삼는다."""
+    html = build(tmp_path)
+    assert 'id="scorecard-data"' in html
+    assert "테스트 결론" in html
+
+
+def test_성적표의_IC_시계열은_배포본에서_빠진다(tmp_path, demo_state, macro_state):
+    """화면에 쓰지 않는 큰 배열까지 실으면 배포본만 무거워진다."""
+    html = build(tmp_path)
+    assert '"series"' not in html
+
+
+def test_브리핑_파일이_없어도_빌드는_성공한다(tmp_path, demo_state, monkeypatch):
+    """파일이 없는 것은 오류가 아니다 — 화면이 탭을 없애는 쪽으로 처리한다."""
+    empty = tmp_path / "empty_state"
+    empty.mkdir()
+    monkeypatch.setattr(config, "STATE_DIR", empty)
+    html = build(tmp_path)
+    # 판정은 데이터 태그로 한다. `window.__MACRO__` 라는 문자열 자체는 대시보드
+    # 스크립트가 늘 참조하므로, 그걸로는 임베드 여부를 가릴 수 없다.
+    assert 'id="macro-data"' not in html
+    assert 'id="scorecard-data"' not in html
+    assert 'id="tabs"' in html          # 문서 자체는 멀쩡하다
