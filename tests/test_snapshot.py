@@ -247,3 +247,53 @@ def test_브리핑_파일이_없어도_빌드는_성공한다(tmp_path, demo_sta
     assert 'id="macro-data"' not in html
     assert 'id="scorecard-data"' not in html
     assert 'id="tabs"' in html          # 문서 자체는 멀쩡하다
+
+
+# --------------------------------------------------- 프라이버시 (배포본 회귀 고정)
+#
+# 배포본은 여러 사람이 같은 URL 로 연다. **한 사람의 보유 종목이 다른 사람에게
+# 보이면 안 된다.** 지금 구조가 그걸 보장하는 이유는 두 가지다:
+#   ① remote 모드의 보유 목록은 방문자 브라우저의 localStorage 에만 있다
+#   ② 배포 HTML 에는 어떤 보유 데이터도 구워 넣지 않는다
+# 둘 중 하나라도 깨지면 조용히 유출된다(에러가 안 난다). 그래서 테스트로 고정한다.
+
+def test_remote_모드는_보유_목록을_브라우저에만_저장한다(tmp_path, demo_state):
+    """실측(2026-08-28, Vercel 배포본): 종목을 추가할 때 서버로 간 요청은
+    `/api/search`(검색어)와 `/api/market`(심볼)뿐이고, **수량·평단은 어떤 요청에도
+    들어가지 않았다.** 그 성질을 소스 수준에서 고정한다."""
+    out = tmp_path / "remote.html"
+    build_snapshot.build(out, remote=True, include_bot=False)
+    html = out.read_text(encoding="utf-8")
+
+    assert "const RemoteStore" in html
+    assert "localStorage.setItem(LS_KEY" in html
+
+    # 보유 데이터를 서버로 보내는 엔드포인트가 remote 경로에 생기지 않았는지.
+    # (ServerStore 쪽 정의는 남아 있어도 되지만 RemoteStore 가 그걸 쓰면 안 된다)
+    start = html.index("const RemoteStore")
+    end = html.index("const Store =", start)
+    remote_block = html[start:end]
+    for banned in ("/api/holdings", "method:'POST'", 'method: "POST"'):
+        assert banned not in remote_block, (
+            f"remote 저장소가 서버로 보유 데이터를 보내고 있다: {banned}")
+
+
+def test_배포본에_보유_데이터가_구워지지_않는다(tmp_path, demo_state, macro_state):
+    """운영자가 자기 종목을 넣어둔 채로 배포본을 빌드해도, 그 목록이 파일에
+    실리면 안 된다. 임베드되는 것은 시장 데이터와 성적표뿐이다."""
+    holdings = macro_state / "holdings.json"
+    holdings.write_text(json.dumps({"holdings": [
+        {"ticker": "005930.KS", "name": "삼성전자", "quantity": 10, "avg_cost": 240000},
+    ]}, ensure_ascii=False), encoding="utf-8")
+
+    for kwargs in ({"remote": True, "include_bot": False}, {}):
+        out = tmp_path / f"snap{len(kwargs)}.html"
+        build_snapshot.build(out, **kwargs)
+        html = out.read_text(encoding="utf-8")
+        assert "005930" not in html, f"보유 종목이 배포본에 실렸다 ({kwargs})"
+        assert "240000" not in html
+        assert 'id="holdings-data"' not in html
+        # 임베드되는 데이터 태그는 이 둘로 한정한다
+        import re
+        tags = set(re.findall(r'<script id="([a-z-]+)-data"', html))
+        assert tags <= {"macro", "scorecard"}, f"예상 밖의 데이터가 실렸다: {tags}"

@@ -27,7 +27,7 @@ for _s in (sys.stdout, sys.stderr):
     if hasattr(_s, "reconfigure"):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
-from core import backtest, config, data_desk, infer_cache, sweep  # noqa: E402
+from core import backtest, baselines, config, data_desk, infer_cache, sweep  # noqa: E402
 
 logging.basicConfig(level=logging.WARNING,
                     format="%(asctime)s [%(name)s] %(message)s", datefmt="%H:%M:%S")
@@ -45,6 +45,15 @@ def parse_args():
                          "컨텍스트로 소모되므로 원하는 백테스트 기간보다 넉넉해야 한다")
     ap.add_argument("--equity", type=float, default=config.INITIAL_EQUITY,
                     help="초기 자산")
+    ap.add_argument("--scorer", default="kronos",
+                    choices=["kronos", "flat", "random"],
+                    help="견해 공급자. kronos(기본) 외에는 대조군이다 — "
+                         "flat: 전 종목 동일 견해(최적화기만의 성과), "
+                         "random: 시드 고정 난수(Kronos 가 난수보다 나은가). "
+                         "대조군은 추론을 하지 않아 즉시 끝나고 캐시를 건드리지 않는다")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="random 대조군의 시드. 난수 견해로 한 번 돌린 결과 하나는 "
+                         "운 좋은 시드였을 수 있으므로 여러 값으로 돌려 분포를 볼 것")
     ap.add_argument("--no-cache", action="store_true",
                     help="추론 캐시를 쓰지 않는다 (같은 설정으로 견해 안정성을 볼 때)")
     ap.add_argument("--dry-run", action="store_true",
@@ -164,8 +173,18 @@ def main():
     if args.sweep:
         return run_sweep(args, bars)
 
-    cache = infer_cache.InferenceCache(enabled=not args.no_cache)
-    scorer = cache.wrap()
+    # 대조군은 추론을 하지 않으므로 캐시를 쓰지 않는다. 캐시에 넣어서도 안 된다 —
+    # 가짜 견해가 진짜 추론 결과와 섞이면 성적표(`scripts/validate.py`)가 오염된다.
+    base = baselines.get(args.scorer, salt=args.seed)
+    if base is not None:
+        cache = infer_cache.InferenceCache(enabled=False)
+        scorer = base
+        print(f"대조군      : {args.scorer}"
+              + (f" seed={args.seed}" if args.scorer == "random" else "")
+              + " (Kronos 추론 없음)")
+    else:
+        cache = infer_cache.InferenceCache(enabled=not args.no_cache)
+        scorer = cache.wrap()
 
     t0 = time.time()
 
