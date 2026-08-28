@@ -198,6 +198,43 @@ footer p{margin:0 0 6px}
 .tabpane{display:none}
 .tabpane.on{display:block}
 
+/* ---- 종목 판정 ---- */
+.vcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;margin-bottom:10px}
+.vhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.vname{font-family:var(--disp);font-size:14px;font-weight:600}
+.vname .vt{color:var(--dim);font-size:11px;margin-left:6px}
+.vbadge{font-size:10.5px;padding:3px 9px;border-radius:3px;border:1px solid var(--line);
+  color:var(--muted);white-space:nowrap}
+.vbadge.buy{background:rgba(79,191,122,.12);color:var(--pos);border-color:rgba(79,191,122,.32)}
+.vbadge.hold{background:rgba(109,143,212,.12);color:#8fb0e8;border-color:rgba(109,143,212,.3)}
+.vbadge.trim{background:rgba(216,161,58,.12);color:#e8c377;border-color:rgba(216,161,58,.3)}
+.vbadge.sell{background:rgba(224,112,108,.14);color:var(--neg);border-color:rgba(224,112,108,.35)}
+.vsum{font-size:12px;color:#b9c2ce;margin-top:6px;line-height:1.7}
+.vcols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.vcol h5{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;margin:0 0 6px;
+  font-weight:600}
+.vcol.for h5{color:var(--pos)} .vcol.against h5{color:var(--neg)}
+.vreason{font-size:11.5px;line-height:1.65;color:#aab4c0;margin-bottom:7px;
+  padding-left:9px;border-left:2px solid var(--line)}
+.vcol.for .vreason{border-left-color:rgba(79,191,122,.4)}
+.vcol.against .vreason{border-left-color:rgba(224,112,108,.4)}
+.vreason b{color:#d7dee8;font-weight:600}
+.vkind{font-size:9px;padding:0 5px;border-radius:2px;margin-left:5px;vertical-align:1px}
+.vkind.fact{background:rgba(255,255,255,.08);color:var(--muted)}
+.vkind.forecast{background:rgba(216,161,58,.16);color:#e8c377}
+.vstops{margin-top:12px;border-top:1px solid var(--line2);padding-top:10px}
+.vstops h5{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);
+  margin:0 0 7px;font-weight:600}
+.vstop{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;
+  padding:4px 0;color:#aab4c0}
+.vstop .vsp{font-variant-numeric:tabular-nums;color:#d7dee8}
+.vstop.breached{color:#e8918d}
+.vstop.breached .vsp{color:#e8918d;text-decoration:line-through}
+.vnote{font-size:11px;color:var(--dim);margin-top:7px;line-height:1.6}
+.vwhy{font-size:11px;color:var(--dim);margin-top:3px;line-height:1.6}
+@media (max-width:720px){ .vcols{grid-template-columns:1fr} }
+
 /* ---- 시장 브리핑 ---- */
 .mtopic{background:var(--panel);border:1px solid var(--line);border-radius:10px;
   padding:16px 18px;margin-bottom:14px}
@@ -1280,6 +1317,81 @@ function renderActions(brokers){
   document.getElementById('analyzeBtn').onclick=startAnalysis;
 }
 
+/* ---- 종목 판정 (core/verdict.py 결과 렌더) ----
+   찬성 근거와 반대 근거를 **반드시 나란히** 보여준다. 한쪽만 보이면 사고 싶은
+   이유만 찾게 된다. 그리고 사실(fact)과 예측(forecast)을 배지로 갈라 둔다 —
+   애널리스트 목표가는 이 화면에 남은 유일한 예측이고 낙관 편향이 크다. */
+const VERDICT_CLASS = v =>
+  /손절|매도/.test(v) ? 'sell' :
+  /축소|보류/.test(v) ? 'trim' :
+  /매수/.test(v) ? 'buy' : 'hold';
+
+function renderVerdicts(a){
+  const vs = a.verdicts || [];
+  const failed = a.verdict_failed || [];
+  if(!vs.length && !failed.length){
+    // remote(정적 배포)에는 판정을 계산할 서버가 없다. 조용히 사라지면
+    // 사용자는 기능이 있는 줄도 모른다 — 없다는 사실과 이유를 밝힌다.
+    if(MODE==='remote') return '<div class="note" style="margin-top:18px;line-height:1.9">'+
+      '<b>종목별 판정(추세·밸류에이션·재무·손절선)은 이 페이지에서 계산할 수 없습니다.</b> '+
+      '재무 지표 조회와 판정 계산이 서버에서 돌아야 해서, 저장소를 내려받아 '+
+      '로컬에서 실행할 때만 나옵니다. 위의 비중·손익·집중도·상관·변동성은 '+
+      '이 브라우저에서 계산한 것이라 그대로 보실 수 있습니다.</div>';
+    return '';
+  }
+
+  let h = '<div style="margin-top:20px"><div class="title" style="font-size:13px">'+
+          '종목별 판정</div><div class="note" style="margin:3px 0 12px">'+
+          '추세·밸류에이션·재무·손절선을 규칙으로 재서 낸 판정입니다 — '+
+          '<b>예측이 아니라 지금 상태에 대한 판독</b>입니다. 찬반 근거를 함께 싣습니다.'+
+          '</div>';
+
+  for(const v of vs){
+    const reasons = (list, cls, title) => {
+      if(!list.length) return `<div class="vcol ${cls}"><h5>${title}</h5>`+
+        '<div class="vreason" style="border-left-color:transparent;color:#59636f">없음</div></div>';
+      return `<div class="vcol ${cls}"><h5>${title}</h5>` + list.map(r=>
+        `<div class="vreason"><b>${esc(r.label)}</b> ${esc(r.value)}`+
+        `<span class="vkind ${r.kind}">${r.kind==='forecast'?'예측':'사실'}</span>`+
+        `<div class="vwhy">${emph(r.why)}</div></div>`).join('') + '</div>';
+    };
+
+    const stops = v.stops || {};
+    const stopRows = (stops.levels||[]).map(lv=>
+      `<div class="vstop ${lv.breached?'breached':''}">`+
+      `<span>${esc(lv.label)}${lv.breached?' — 이미 지남':''}</span>`+
+      `<span class="vsp">${Number(lv.price).toLocaleString()} `+
+      `(${lv.distance_pct>0?'+':''}${lv.distance_pct}%)</span></div>`).join('');
+
+    h += `
+      <div class="vcard">
+        <div class="vhead">
+          <div class="vname">${esc(v.name)}<span class="vt">${esc(v.ticker)} · `+
+            `${Number(v.price).toLocaleString()}</span></div>
+          <div class="vbadge ${VERDICT_CLASS(v.verdict)}">${esc(v.verdict)}</div>
+        </div>
+        <div class="vsum">${emph(v.summary)}</div>
+        ${v.is_fund?'<div class="vnote">ETF·펀드라 PER·ROE·부채비율 같은 기업 지표가 '+
+          '존재하지 않습니다. 가격·추세 신호로만 판정했습니다.</div>':''}
+        <div class="vcols">
+          ${reasons(v.reasons_for,'for','살 이유 · 들고 갈 이유')}
+          ${reasons(v.reasons_against,'against','팔 이유 · 사지 않을 이유')}
+        </div>
+        ${stopRows?`<div class="vstops"><h5>손절선 후보</h5>${stopRows}
+          <div class="vnote">${emph(stops.note||'')}</div></div>`:''}
+      </div>`;
+  }
+
+  if(failed.length){
+    h += '<div class="note" style="margin-top:6px">판정하지 못한 종목: '+
+      failed.map(f=>`${esc(f.ticker)} (${esc(f.reason)})`).join(', ')+'</div>';
+  }
+  if(vs.length&&vs[0].disclaimer){
+    h += `<div class="note" style="margin-top:8px;line-height:1.8">${esc(vs[0].disclaimer)}</div>`;
+  }
+  return h + '</div>';
+}
+
 function renderHoldings(){
   if(!HOLD) return;
   renderActions(HOLD.brokers);
@@ -1341,6 +1453,8 @@ function renderHoldings(){
       `${d.pnl.covered}종목 기준 · 수익 ${d.pnl.winners}/손실 ${d.pnl.losers}`);
     html+='</div>';
   }
+
+  html+=renderVerdicts(a);
 
   if(a.notes&&a.notes.length){
     html+='<div class="hnotes">'+a.notes.map(n=>`<div class="hnote">${n}</div>`).join('')+'</div>';

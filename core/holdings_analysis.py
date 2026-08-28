@@ -331,13 +331,52 @@ def build_notes(valuation, diag, views, skipped):
 
 
 # ------------------------------------------------------------------ 진입점
-def analyze(book, with_views=True, scorer=None, bars=None):
+def verdicts_for(book, bars, prices=None, benchmark="SPY"):
+    """보유 종목마다 판정(`core/verdict.py`)을 낸다.
+
+    Kronos 견해와 달리 **예측이 아니라 규칙**이다 — 추세·밸류에이션·재무·손절선을
+    재서 "왜 사거나 팔아야 하는가"를 문장으로 낸다. 같은 날 대조군 실험에서 Kronos
+    견해가 난수와 구분되지 않았으므로, 판단의 근거는 이쪽이 더 정직하다.
+
+    펀더멘털 조회가 종목당 1~2초라 보유 10종목이면 20초쯤 걸린다. 그래서 분석
+    버튼을 눌렀을 때만 돈다(폴링 경로가 아니다).
+    """
+    from . import fundamentals, verdict
+
+    bench = bars.get(benchmark)
+    if bench is None:
+        try:
+            extra, _ = _fetch_bars([benchmark])
+            bench = extra.get(benchmark)
+        except Exception:
+            bench = None       # 상대강도만 빠진다. 나머지 판정은 그대로 나온다
+
+    out, failed = [], []
+    for h in book.to_list():
+        tk = h["ticker"]
+        if tk not in bars:
+            failed.append({"ticker": tk, "reason": "시세를 받지 못했습니다"})
+            continue
+        try:
+            f = fundamentals.fetch_one(tk)
+            out.append(verdict.judge(
+                tk, bars[tk], fund=f,
+                holding={"quantity": h.get("quantity"), "avg_cost": h.get("avg_cost")},
+                benchmark_bars=bench, name=h.get("name")))
+        except Exception as e:                    # 한 종목 실패가 전체를 죽이지 않게
+            log.warning("%s 판정 실패: %s", tk, e)
+            failed.append({"ticker": tk, "reason": f"{type(e).__name__}: {e}"})
+    return out, failed
+
+
+def analyze(book, with_views=True, scorer=None, bars=None, with_verdicts=True):
     """보유 장부 하나를 통째로 분석한다.
 
-    book        : HoldingsBook
-    with_views  : Kronos 견해까지 낼지 (종목당 1초 남짓 걸린다)
-    scorer      : 견해 스코어러 주입 (테스트·캐시용)
-    bars        : 미리 받아둔 봉 (없으면 직접 받는다)
+    book          : HoldingsBook
+    with_views    : Kronos 견해까지 낼지 (종목당 1초 남짓 걸린다)
+    scorer        : 견해 스코어러 주입 (테스트·캐시용)
+    bars          : 미리 받아둔 봉 (없으면 직접 받는다)
+    with_verdicts : 종목별 판정(추세·재무·손절선)까지 낼지
     """
     tickers = book.tickers
     if not tickers:
@@ -363,12 +402,22 @@ def analyze(book, with_views=True, scorer=None, bars=None):
     if with_views:
         views, skipped = views_for(tickers, bars=bars, scorer=scorer)
 
+    verdicts, verdict_failed = ([], [])
+    if with_verdicts:
+        try:
+            verdicts, verdict_failed = verdicts_for(book, bars, prices)
+        except Exception as e:
+            log.warning("판정 단계 실패: %s", e)
+            verdict_failed = [{"ticker": "*", "reason": f"{type(e).__name__}: {e}"}]
+
     return {
         "empty": False,
         "as_of": valuation["as_of"],
         "valuation": valuation,
         "views": views,
         "skipped_views": skipped,
+        "verdicts": verdicts,
+        "verdict_failed": verdict_failed,
         "diagnostics": diag,
         "notes": build_notes(valuation, diag, views, skipped),
         "disclaimer": (
