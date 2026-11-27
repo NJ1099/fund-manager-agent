@@ -14,6 +14,12 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 const MAX_SYMBOLS = 40;
+// 경로에 그대로 붙이므로 티커 문자만 받는다. 그 외는 시세 없음으로 돌려준다.
+const SYMBOL_OK = /^[A-Za-z0-9.^=-]{1,32}$/;
+
+function usablePrice(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
+}
 
 async function chart(symbol, range, interval) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
@@ -42,8 +48,11 @@ async function chart(symbol, range, interval) {
   }
   if (!closes.length) throw new Error('가격 없음');
 
+  const price = usablePrice(meta.regularMarketPrice) || usablePrice(closes[closes.length - 1]);
+  if (price == null) throw new Error('가격 없음');
+
   return {
-    price: meta.regularMarketPrice != null ? meta.regularMarketPrice : closes[closes.length - 1],
+    price,
     currency: (meta.currency || '').toUpperCase() || null,
     name: meta.shortName || meta.longName || null,
     closes,
@@ -53,12 +62,14 @@ async function chart(symbol, range, interval) {
 
 export default async function handler(req, res) {
   const q = req.query || {};
-  const symbols = String(q.symbols || '')
-    .split(',').map((s) => s.trim()).filter(Boolean).slice(0, MAX_SYMBOLS);
+  const raw = String(q.symbols || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const symbols = [];
+  const rejected = [];
+  raw.slice(0, MAX_SYMBOLS).forEach((s) => (SYMBOL_OK.test(s) ? symbols : rejected).push(s));
   const wantHistory = String(q.history || '') === '1';
   const range = ['1mo', '3mo', '6mo', '1y', '2y', '5y'].includes(String(q.range)) ? q.range : '1y';
 
-  if (!symbols.length) {
+  if (!symbols.length && !rejected.length) {
     res.status(400).json({ error: 'symbols 파라미터가 필요합니다' });
     return;
   }
@@ -67,7 +78,7 @@ export default async function handler(req, res) {
   const currencies = {};
   const names = {};
   const history = {};
-  const missing = [];
+  const missing = rejected.slice();
 
   const settled = await Promise.allSettled(
     symbols.map((s) => chart(s, wantHistory ? range : '5d', '1d')));

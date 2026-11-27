@@ -4,7 +4,7 @@
 
 ## 세션 시작 지침
 
-세션 시작 시 `HANDOFF.md`를 먼저 읽으세요. 최근 작업 내역, 잡은 버그, 다음 체크리스트가 있습니다.
+세션 시작 시 이 파일과 `README.md`, `IDEAS.md` 를 읽으세요. 최근 결론과 체크리스트가 거기에 있습니다. 별도의 `HANDOFF.md` 는 저장소에 없습니다.
 
 ## 프로젝트 요약
 
@@ -270,7 +270,7 @@ Kronos 견해는 remote 모드에서 나오지 않는다(모델 추론이 필요
 - 파일을 읽고 쓸 때 **인코딩을 항상 명시**할 것 (`encoding="utf-8"`). Windows 기본값은 cp949라
   한국어가 든 파일에서 깨지거나 죽는다. 상태 파일은 `bot.py` 의 `_atomic_write` 를 쓸 것 —
   대시보드가 15초마다 폴링하므로 부분적으로 쓰인 파일을 읽으면 JSON이 깨진다.
-- 새 기능 추가 후에는 `pytest -q` (275개, 13초 남짓) 다음 `python bot.py once` 로 한 사이클 돌려서
+- 새 기능 추가 후에는 `pytest -q` (309개, 10초 남짓) 다음 `python bot.py once` 로 한 사이클 돌려서
   `state.json`이 정상 생성되는지 확인할 것 — Kronos 추론 때문에 사이클당 12~15초 걸림.
   전략 로직(`core/cycle.py`·`portfolio_desk.py`)을 건드렸다면 백테스트도 한 번 돌릴 것:
   `python scripts/backtest.py --start <최근 6개월> --step 20` (캐시가 있으면 수 초).

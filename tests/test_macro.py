@@ -201,6 +201,18 @@ def test_한_주제가_죽어도_나머지_주제는_나온다():
     assert {x["topic"] for x in b["briefs"]} >= {"rates", "fx", "metals"}
 
 
+def test_뉴스_피드는_https만_쓴다():
+    from core import news_desk
+    for _name, url, _lang, _hint in news_desk.FEEDS:
+        assert url.startswith("https://"), url
+
+
+def test_javascript_링크는_비운다():
+    from core.news_desk import _safe_link
+    assert _safe_link("javascript:alert(1)") == ""
+    assert _safe_link("https://example.com/a") == "https://example.com/a"
+
+
 def test_브리핑은_LLM_을_부르지_않는다():
     """대시보드 새로고침에 돈이 들면 안 된다."""
     src = (macro_brief.__file__)

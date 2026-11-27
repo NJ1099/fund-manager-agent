@@ -25,6 +25,7 @@
 자세한 이유는 `core/brokers/__init__.py` 독스트링 참고.
 """
 import logging
+import re
 import time
 
 from .. import config
@@ -101,8 +102,12 @@ class TossAdapter(BrokerAdapter):
             raise BrokerError("토스증권 토큰 발급 응답에 access_token 이 없습니다")
 
         # 만료 60초 전에 새로 받는다 (경계에서 401 이 나지 않게)
+        try:
+            ttl = int(data.get("expires_in", 86400))
+        except (TypeError, ValueError):
+            ttl = 86400
         self._token = token
-        self._token_expires_at = time.time() + max(int(data.get("expires_in", 86400)) - 60, 60)
+        self._token_expires_at = time.time() + max(ttl - 60, 60)
         return token
 
     def _headers(self, account=None):
@@ -157,9 +162,10 @@ class TossAdapter(BrokerAdapter):
                 qty = self._num(_pick(row, _F_QTY))
                 # 필드를 읽어냈는지와, 그 값이 보유인지는 다른 문제다.
                 # 전량 매도해 수량이 0 인 계좌를 '필드명 불일치'로 오진하면 안 된다.
-                if sym is not None and qty is not None:
+                # NaN 은 '수량을 읽었다'가 아니다. 빈 목록으로 두면 장부가 지워진다.
+                if sym is not None and qty is not None and qty == qty:
                     recognized = True
-                if not sym or not qty or qty <= 0:
+                if not sym or not (qty and qty > 0):
                     continue
                 out.append({
                     "ticker": self._to_yahoo(sym, _pick(row, _F_MARKET),
@@ -190,9 +196,12 @@ class TossAdapter(BrokerAdapter):
 
         if code.endswith((".KS", ".KQ")):
             return code
-        # 6자리 숫자 = 국내 종목. 코스닥 표시가 있으면 .KQ, 아니면 .KS
+        # 6자리 숫자 = 국내 종목. 코스닥 표시가 있으면 .KQ, 아니면 .KS.
+        # 'KQ' 를 부분 문자열로 보면 'BANKQ' 같은 값이 코스닥이 된다.
+        tokens = {t for t in re.split(r"[^A-Z0-9]+", mk) if t}
+        kosdaq = "KOSDAQ" in mk or "KQ" in tokens or "코스닥" in str(market or "")
         if code.isdigit() and len(code) == 6:
-            return code + (".KQ" if "KOSDAQ" in mk or "KQ" in mk else ".KS")
+            return code + (".KQ" if kosdaq else ".KS")
         if ccy == "KRW" and code.isdigit():
             return code + ".KS"
         return code                          # 해외는 티커 그대로 (AAPL 등)

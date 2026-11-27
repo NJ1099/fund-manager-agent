@@ -170,6 +170,23 @@ def test_평단이_없으면_손익을_지어내지_않는다(book):
     assert row["pnl"] is None
 
 
+def test_NaN_가격은_합계를_오염시키지_않는다(book, monkeypatch):
+    """NaN 은 파이썬에서 참이다. 그대로 곱하면 평가액 전체가 NaN 이 된다."""
+    monkeypatch.setattr(config, "HOLDINGS_BASE_CURRENCY", "USD")
+    book.upsert(ticker="AAPL", quantity=2, avg_cost=100)
+    val = book.valuation({"AAPL": float("nan")}, {"USD": 1.0})
+    assert val["unpriced"] == ["AAPL"]
+    assert val["total_value"] == 0
+
+
+def test_비정상_수량의_동기화는_기존_장부를_유지한다(book):
+    book.upsert(ticker="AAPL", quantity=1, source="toss")
+    with pytest.raises(ValueError):
+        book.replace_source("toss", [{"ticker": "MSFT", "quantity": float("nan")}])
+    assert book.items["AAPL"]["quantity"] == 1
+    assert "MSFT" not in book.items
+
+
 def test_시세를_못_받은_종목은_합산에서_빠지고_보고된다(book):
     """0 으로 채우면 총자산이 조용히 줄어든다."""
     book.upsert(ticker="AAPL", quantity=1, currency="USD")
@@ -267,6 +284,28 @@ def test_숫자_표기_변형들을_해석한다():
     assert holdings_csv.parse_number("") is None
     assert holdings_csv.parse_number("-") is None
     assert holdings_csv.parse_number(None) is None
+
+
+def test_종목코드_열이_종목명_자리를_빼앗지_않는다():
+    """'종목' 이 '종목코드' 에 먼저 붙으면 옆의 이름 열은 무시된다."""
+    text = "종목코드,회사명한글,보유수량\n005930,삼성전자,10\n"
+    items, info = holdings_csv.parse(csv_bytes(text), resolve_market=False)
+    assert items[0]["name"] == "삼성전자"
+    assert info["columns_used"]["name"] == "회사명한글"
+    assert info["columns_used"]["ticker"] == "종목코드"
+
+
+def test_이름_열이_없으면_종목코드를_이름으로_쓰지_않는다():
+    text = "종목코드,보유수량\n005930,10\n"
+    items, info = holdings_csv.parse(csv_bytes(text), resolve_market=False)
+    assert items[0]["name"] is None
+    assert info["columns_used"]["name"] is None
+
+
+def test_통화코드는_종목코드가_아니다():
+    text = "통화코드,보유수량\nKRW,10\n"
+    with pytest.raises(ValueError, match="종목코드"):
+        holdings_csv.parse(csv_bytes(text), resolve_market=False)
 
 
 def test_빈_파일은_명확히_실패한다():

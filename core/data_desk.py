@@ -1,5 +1,6 @@
 """데이터 데스크 — yfinance에서 OHLCV를 받아 종목별 DataFrame으로 정리한다."""
 import logging
+import math
 
 import pandas as pd
 import yfinance as yf
@@ -70,4 +71,20 @@ def returns_frame(bars_by_ticker, tickers, window=None):
 
 
 def latest_prices(bars_by_ticker, tickers):
-    return {tk: float(bars_by_ticker[tk]["close"].iloc[-1]) for tk in tickers}
+    """마지막 종가. 0·음수·NaN·무한대는 키를 빼서 '가격 없음'으로 남긴다.
+
+    그 값을 그대로 넘기면 집행 데스크가 수량을 계산하다 죽거나, 무한대 가격을
+    '목표 0주'로 읽어 보유를 정리한 것처럼 장부에 반영한다.
+    """
+    out = {}
+    for tk in tickers:
+        df = bars_by_ticker.get(tk)
+        if df is None or len(df) == 0 or "close" not in df:
+            continue
+        try:
+            px = float(df["close"].iloc[-1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if math.isfinite(px) and px > 0:
+            out[tk] = px
+    return out

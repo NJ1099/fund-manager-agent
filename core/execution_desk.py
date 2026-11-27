@@ -13,6 +13,7 @@
   - 가격이 결손된 종목도 마지막 알려진 가격으로 평가만 하고 포지션은 유지한다.
 """
 import logging
+import math
 
 import pandas as pd
 from nautilus_trader.core.uuid import UUID4
@@ -26,6 +27,26 @@ from nautilus_trader.model.orders import MarketOrder
 from . import config
 
 log = logging.getLogger("execution")
+
+# 한 주문의 주식 수 상한. 가격이 비정상적으로 작으면 수량이 정수 범위를 넘고,
+# NautilusTrader Quantity 생성에서 사이클 전체가 죽는다. 넘으면 그 종목만 건너뛴다.
+MAX_ORDER_SHARES = 1_000_000_000
+
+
+def _positive_price(px):
+    """주문·평가에 쓸 수 있는 가격. 0·음수·NaN·무한대는 결손과 같다.
+
+    NaN 은 `px <= 0` 이 False 라서, 그 조건만으로는 걸리지 않는다.
+    걸러내지 않으면 수량 계산이 예외로 죽거나, 무한대 가격이 '목표 0주'가 되어
+    보유를 통째로 판 것처럼 장부에 남는다.
+    """
+    try:
+        px = float(px)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(px) or px <= 0:
+        return None
+    return px
 
 
 class ExecutionDesk:
@@ -52,18 +73,19 @@ class ExecutionDesk:
     def observe_prices(self, prices):
         """관측된 가격으로 평가 기준을 갱신한다."""
         for tk, px in prices.items():
-            if px and px > 0:
-                self.last_prices[tk] = float(px)
+            px = _positive_price(px)
+            if px is not None:
+                self.last_prices[tk] = px
 
     def _mark_price(self, tk, prices):
         """평가용 가격. 이번 사이클 가격이 없으면 마지막 알려진 가격으로 대신한다.
 
         주문 생성에는 절대 쓰지 않는다 — 낡은 가격으로 주문을 내면 안 되기 때문이다.
         """
-        px = prices.get(tk)
-        if px and px > 0:
-            return float(px)
-        return self.last_prices.get(tk)
+        px = _positive_price(prices.get(tk))
+        if px is not None:
+            return px
+        return _positive_price(self.last_prices.get(tk))
 
     def market_value(self, prices):
         total = 0.0
@@ -101,7 +123,15 @@ class ExecutionDesk:
         self.observe_prices(prices)
         self.degraded = []
 
+        if not math.isfinite(self.cash):
+            # 현금이 NaN·무한대면 이후 수량이 전부 오염된다. 주문을 만들지 않는다.
+            log.error("현금 장부가 숫자가 아닙니다 — 이번 사이클은 주문을 만들지 않습니다")
+            return [], self.weights(prices)
+
         equity_before = self.equity(prices)
+        if not math.isfinite(equity_before) or equity_before <= 0:
+            log.error("평가자산이 올바르지 않습니다 (%.4g) — 주문을 만들지 않습니다", equity_before)
+            return [], self.weights(prices)
         weights_before = self.weights(prices)
         target = {tk: float(w) for tk, w in target_weights.items() if float(w) > 0}
 
@@ -112,15 +142,26 @@ class ExecutionDesk:
 
         plan = []
         for tk in sorted(universe):
-            px = prices.get(tk)
+            px = _positive_price(prices.get(tk))
             held = self.positions.get(tk, 0)
-            if not px or px <= 0:
+            if px is None:
                 if held > 0 or target.get(tk, 0.0) > 0:
                     log.error("%s: 가격 없음 — 주문 생략 (보유 %d주 유지)", tk, held)
                     self.degraded.append(tk)
                 continue
-            want = int(target.get(tk, 0.0) * equity_before / px)
+            try:
+                want = int(target.get(tk, 0.0) * equity_before / px)
+            except (OverflowError, ValueError):
+                log.error("%s: 주문 수량을 계산하지 못했습니다 — 주문 생략 (보유 %d주 유지)",
+                          tk, held)
+                self.degraded.append(tk)
+                continue
             delta = want - held
+            if abs(delta) > MAX_ORDER_SHARES:
+                log.error("%s: 주문 수량 %d 이 상한 초과 — 주문 생략 (보유 %d주 유지)",
+                          tk, delta, held)
+                self.degraded.append(tk)
+                continue
             if abs(delta) * px < config.MIN_ORDER_NOTIONAL:
                 continue
             plan.append((tk, delta, float(px)))
@@ -213,4 +254,8 @@ class ExecutionDesk:
         self.positions = {tk: int(sh) for tk, sh in (positions or {}).items() if int(sh) > 0}
         self.seq = int(seq or 0)
         self.costs_paid = float(costs_paid or 0.0)
-        self.last_prices = {k: float(v) for k, v in (last_prices or {}).items()}
+        self.last_prices = {}
+        for k, v in (last_prices or {}).items():
+            px = _positive_price(v)
+            if px is not None:
+                self.last_prices[k] = px

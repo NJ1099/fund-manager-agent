@@ -148,6 +148,42 @@ def test_가격이_오르면_자산이_늘고_비중이_따라간다():
     assert d.weights(up)["AAA"] > d.weights(PRICES)["AAA"]
 
 
+def test_NaN_가격은_결손으로_보고하고_보유를_유지한다():
+    """NaN 은 `px <= 0` 이 아니라서, 그 조건만 보면 수량 계산이 예외로 죽는다."""
+    d = make_desk()
+    d.rebalance(w(AAA=0.5), PRICES, "2026-01-02")
+    held = d.positions["AAA"]
+
+    orders, _ = d.rebalance(w(AAA=0.2, BBB=0.4),
+                            {"AAA": float("nan"), "BBB": 50.0}, "2026-01-03")
+
+    assert "AAA" in d.degraded
+    assert d.positions["AAA"] == held
+    assert all(o["ticker"] != "AAA" for o in orders)
+    assert d.cash >= 0
+    assert d.cash == d.cash          # NaN 이 현금으로 번지지 않는다
+
+
+def test_무한대_가격으로_보유를_청산하지_않는다():
+    """무한대 가격은 목표 수량을 0 으로 만들어 보유를 통째로 판 것처럼 보인다."""
+    d = make_desk()
+    d.rebalance(w(AAA=0.5), PRICES, "2026-01-02")
+    held = d.positions["AAA"]
+
+    d.rebalance(w(AAA=0.5), {"AAA": float("inf")}, "2026-01-03")
+
+    assert d.positions.get("AAA") == held
+    assert "AAA" in d.degraded
+    assert d.cash == d.cash
+
+
+def test_복원된_NaN_가격은_평가에_쓰지_않는다():
+    d = make_desk()
+    d.restore(cash=1_000.0, positions={"AAA": 2}, last_prices={"AAA": float("nan")})
+    assert "AAA" not in d.last_prices
+    assert d.equity({}) == pytest.approx(1_000.0)
+
+
 def test_가격이_결손되면_마지막_알려진_가격으로_평가한다():
     d = make_desk()
     d.rebalance(w(AAA=0.5, BBB=0.5), PRICES, "2026-01-02")

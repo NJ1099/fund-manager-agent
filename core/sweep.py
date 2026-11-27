@@ -41,8 +41,14 @@ TUNABLE = {
     "TOP_P": float,
 }
 
-# 절대 바꿀 수 없는 것 (여기 없어도 TUNABLE 에 없으면 거부되지만, 의도를 명시해 둔다)
-FORBIDDEN = {"EXECUTION_MODE", "ALLOW_LIVE_ORDERS", "ANTHROPIC_API_KEY", "PM_LLM_MODE"}
+# 절대 바꿀 수 없는 것. TUNABLE 에 없어도 거부되지만, 안전장치·자격증명·
+# 호출 주소는 오류 문구로도 구분한다. 주소를 스윕으로 바꾸면 조회가 다른 서버로 간다.
+FORBIDDEN = {
+    "EXECUTION_MODE", "ALLOW_LIVE_ORDERS", "ANTHROPIC_API_KEY", "PM_LLM_MODE",
+    "TOSS_CLIENT_ID", "TOSS_CLIENT_SECRET", "TOSS_API_BASE",
+    "KIS_APP_KEY", "KIS_APP_SECRET", "KIS_ACCOUNT", "KIS_API_BASE",
+    "SERVER_HOST",
+}
 
 
 def _cast(name, raw):
@@ -57,17 +63,22 @@ def _cast(name, raw):
     return typ(raw)
 
 
+def _reject_locked(key):
+    """화이트리스트 밖이거나 안전장치면 예외. apply 가 parse 를 건너뛰지 못하게 한다."""
+    if key in FORBIDDEN:
+        raise ValueError(f"{key} 는 백테스트에서 바꿀 수 없습니다 (안전장치).")
+    if key not in TUNABLE:
+        raise ValueError(f"{key} 는 조정 가능한 설정이 아닙니다. "
+                         f"가능한 값: {', '.join(sorted(TUNABLE))}")
+
+
 def parse_assignment(text):
     """'TOP_K=3' → ('TOP_K', 3)"""
     if "=" not in text:
         raise ValueError(f"KEY=VALUE 형식이 아닙니다: {text}")
     key, raw = text.split("=", 1)
     key = key.strip().upper()
-    if key in FORBIDDEN:
-        raise ValueError(f"{key} 는 백테스트에서 바꿀 수 없습니다 (안전장치).")
-    if key not in TUNABLE:
-        raise ValueError(f"{key} 는 조정 가능한 설정이 아닙니다. "
-                         f"가능한 값: {', '.join(sorted(TUNABLE))}")
+    _reject_locked(key)
     return key, _cast(key, raw.strip())
 
 
@@ -75,7 +86,10 @@ def apply(assignments):
     """config 에 값을 적용하고 (이전값 dict) 를 돌려준다.
 
     각 데스크가 함수 안에서 `config.X` 를 읽으므로 setattr 이 그대로 반영된다.
+    parse 를 거치지 않은 dict 도 같은 잠금을 탄다.
     """
+    for key in assignments:
+        _reject_locked(key)
     previous = {}
     for key, value in assignments.items():
         previous[key] = getattr(config, key)
