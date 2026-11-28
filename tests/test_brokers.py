@@ -168,6 +168,7 @@ def test_토스_계좌가_없으면_실패한다(toss):
     ("247540", "KOSDAQ", "KRW", "247540.KQ"),
     ("AAPL", "NASDAQ", "USD", "AAPL"),
     ("005930.KS", "", "KRW", "005930.KS"),      # 이미 붙어 있으면 그대로
+    ("005930", "BANKQ", "KRW", "005930.KS"),    # 'KQ' 부분문자열은 코스닥이 아니다
 ])
 def test_토스_심볼_변환(code, market, currency, expected):
     assert TossAdapter._to_yahoo(code, market, currency) == expected
@@ -267,6 +268,62 @@ def test_해외조회_실패해도_국내분은_살린다(kis):
 
 
 # ------------------------------------------------------------------ 자격증명 노출
+def test_KIS_뉴욕거래소_보유를_빠뜨리지_않는다(kis):
+    """NASD 만 조회하면 뉴욕 보유는 '팔린 종목'이 되어 장부에서 지워진다."""
+    def fake(url, method="GET", headers=None, body=None, form=None):
+        if "domestic-stock" in url:
+            return {"rt_cd": "0", "output1": []}
+        if "OVRS_EXCG_CD=NYSE" in url:
+            return {"rt_cd": "0", "output1": [{
+                "ovrs_pdno": "JPM", "ovrs_item_name": "JPMORGAN",
+                "ovrs_cblc_qty": "4", "pchs_avg_pric": "200",
+                "tr_crcy_cd": "USD", "ovrs_excg_cd": "NYSE"}]}
+        if "OVRS_EXCG_CD=NASD" in url:
+            return {"rt_cd": "0", "output1": [{
+                "ovrs_pdno": "AAPL", "ovrs_item_name": "APPLE",
+                "ovrs_cblc_qty": "1", "pchs_avg_pric": "190",
+                "tr_crcy_cd": "USD", "ovrs_excg_cd": "NASD"}]}
+        return {"rt_cd": "0", "output1": []}
+
+    kis._request = fake
+    by = {i["ticker"]: i for i in kis.fetch_holdings()}
+    assert set(by) == {"AAPL", "JPM"}
+    assert by["JPM"]["quantity"] == 4
+
+
+def test_같은_해외잔고가_반복되면_수량을_곱하지_않는다(kis):
+    row = {"ovrs_pdno": "AAPL", "ovrs_cblc_qty": "3", "pchs_avg_pric": "1",
+           "tr_crcy_cd": "USD", "ovrs_excg_cd": "NASD"}
+
+    def fake(url, method="GET", headers=None, body=None, form=None):
+        if "domestic-stock" in url:
+            return {"rt_cd": "0", "output1": []}
+        if "overseas-stock" in url:
+            return {"rt_cd": "0", "output1": [dict(row)]}
+        return {"rt_cd": "0", "output1": []}
+
+    kis._request = fake
+    items = kis.fetch_holdings()
+    assert len(items) == 1
+    assert items[0]["quantity"] == 3
+
+
+def test_KIS_국내잔고는_다음_페이지를_이어_붙인다(kis):
+    def fake(url, method="GET", headers=None, body=None, form=None):
+        if "domestic-stock" not in url:
+            return {"rt_cd": "0", "output1": []}
+        if "CTX_AREA_NK100=NEXT" in url:
+            return {"rt_cd": "0", "output1": [
+                {"pdno": "000660", "hldg_qty": "2", "pchs_avg_pric": "100000"}]}
+        return {"rt_cd": "0", "output1": [
+            {"pdno": "005930", "hldg_qty": "1", "pchs_avg_pric": "70000"}],
+            "ctx_area_fk100": "FK", "ctx_area_nk100": "NEXT"}
+
+    kis._request = fake
+    tickers = {i["ticker"] for i in kis.fetch_holdings()}
+    assert tickers == {"005930.KS", "000660.KS"}
+
+
 def test_오류_메시지에_자격증명이_들어가지_않는다(monkeypatch):
     """오류는 대시보드 화면과 로그에 그대로 뜬다."""
     import urllib.error
@@ -283,3 +340,26 @@ def test_오류_메시지에_자격증명이_들어가지_않는다(monkeypatch)
     with pytest.raises(BrokerError) as e:
         a._access_token()
     assert secret not in str(e.value)
+
+
+def test_오류_본문에_섞인_자격증명은_가린다(monkeypatch):
+    """증권사가 요청 값을 오류 본문에 그대로 돌려줘도 화면·로그에 남으면 안 된다."""
+    import io
+    import urllib.error
+
+    secret = "SUPER-SECRET-VALUE"
+    monkeypatch.setattr(config, "TOSS_CLIENT_ID", "id")
+    monkeypatch.setattr(config, "TOSS_CLIENT_SECRET", secret)
+
+    def boom(*args, **kwargs):
+        raise urllib.error.HTTPError(
+            "https://x", 401, "Unauthorized", {},
+            io.BytesIO(f"invalid client_secret={secret}".encode()),
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+    a = TossAdapter()
+    with pytest.raises(BrokerError) as e:
+        a._access_token()
+    assert secret not in str(e.value)
+    assert "****" in str(e.value)

@@ -550,6 +550,17 @@ footer p{margin:0 0 6px}
 const COLORS={SPY:'#6d8fd4',QQQ:'#a479c9',IWM:'#c98b6a',TLT:'#3fb0a0',IEF:'#4d9e91',
   GLD:'#d4a24c',SLV:'#9aa6b4',XLE:'#cf7355',XLF:'#5b9bd4',XLK:'#8a7fd0'};
 const c=t=>COLORS[t]||'#7b8794';
+/* 검색 결과·보유 이름·LLM 문장은 그대로 innerHTML 에 넣으면 태그가 실행된다. */
+const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,ch=>(
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+/* 코멘트에 쓰인 **강조** 만 태그로 바꾼다. 그 외 입력은 전부 이스케이프된 뒤라 안전하다. */
+const emph=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b style="color:#d7dee8">$1</b>');
+function safeUrl(u){
+  const s=String(u||'').trim();
+  return /^https?:\/\//i.test(s) ? esc(s) : '';
+}
+/* 로컬 서버의 POST 는 이 헤더가 있을 때만 받는다. 다른 사이트의 form 은 못 붙인다. */
+const FMA_HEADERS={'X-Requested-With':'fma'};
 const usd=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=v=>(v>=0?'+':'')+v.toFixed(2)+'%';
 let polling=null;
@@ -574,11 +585,11 @@ document.getElementById('tabs').addEventListener('click', e=>{
 
 async function load(){
   try{
-    const r=await fetch('/api/state',{cache:'no-store'});
+    const r=await fetch('/api/state',{cache:'no-store', headers:FMA_HEADERS});
     if(!r.ok){
       const e=await r.json().catch(()=>({error:'상태를 읽을 수 없습니다'}));
       document.getElementById('root').innerHTML=
-        `<div class="loading">${e.error||'상태 없음'}</div>`;
+        `<div class="loading">${esc(e.error||'상태 없음')}</div>`;
       return;
     }
     render(await r.json());
@@ -704,7 +715,7 @@ function render(s){
       <div class="rank">${w.rank}</div>
       <div class="tk" style="color:${c(w.ticker)}">${w.ticker}
         <small>$${w.last_close.toFixed(2)}</small></div>
-      <div class="note-cell">${notes[w.ticker]||''}</div>
+      <div class="note-cell">${esc(notes[w.ticker]||'')}</div>
       <div class="view" style="color:${w.view_horizon_pct>=0?'var(--pos)':'var(--neg)'}">
         ${pct(w.view_horizon_pct)}<br><span class="dir ${w.direction}">${w.direction}</span></div>
       <div class="conf">
@@ -750,11 +761,11 @@ function render(s){
         <div class="note">읽고 논평만 — 주문 경로에 관여하지 않음</div></div>
       <div class="panel opinion">
         <div class="who">◆ PM · 감독 데스크 · ${s.as_of}</div>
-        <p>${s.pm_opinion}</p>
+        <p>${esc(s.pm_opinion||'')}</p>
         <div class="foot">
           출처: ${isRules
-            ? '결정론적 룰 기반 — 비용 0 · 사유: ' + (s.pm_source.split(':')[1]||'')
-            : s.pm_source + ' (유료 호출)'}<br>
+            ? '결정론적 룰 기반 — 비용 0 · 사유: ' + esc((s.pm_source||'').split(':').slice(1).join(':'))
+            : esc(s.pm_source||'') + ' (유료 호출)'}<br>
           LLM 정책: <b>${s._llm_mode||m.pm_llm_mode||'once'}</b> ·
           ${llmAvail?`지금까지 실제 호출 <b>${s.llm_calls||0}</b>회`:'API 키 없음 — 항상 무료'}
           · 대시보드 새로고침·폴링은 저장된 파일만 읽으므로 비용이 발생하지 않습니다.${
@@ -801,13 +812,13 @@ function render(s){
           <div class="note">이번 사이클이 어떻게 나왔나</div></div>
         <div class="panel"><div class="diag">
           ${(p.degraded&&p.degraded.length)
-            ? `<span class="warn">⚠ 데이터 결손: ${p.degraded.join(', ')} 의 가격을 받지 못해
+            ? `<span class="warn">⚠ 데이터 결손: ${esc(p.degraded.join(', '))} 의 가격을 받지 못해
                주문을 만들지 못했고 장부를 정규화했습니다. 이 사이클의 비중은 의도된 결과가 아닙니다.</span><br>`
             : ''}
           최적화: <b>${p.meta.fallback_used
             ? '<span class="warn">실패 → 동일가중 후퇴</span>'
             : 'CVaR ' + (p.meta.constraints.cvar_beta*100) + '% 정상 해'}</b><br>
-          ${p.meta.fallback_used?`<span class="warn">사유: ${p.meta.fallback_reason||'-'}</span><br>`:''}
+          ${p.meta.fallback_used?`<span class="warn">사유: ${esc(p.meta.fallback_reason||'-')}</span><br>`:''}
           제약: 단일 상한 <b>${(m.max_weight*100).toFixed(0)}%</b> ·
             회전율 <b>${p.meta.constraints.max_turnover!=null?(m.max_turnover*100).toFixed(0)+'%':'미적용(최초 편입)'}</b> ·
             비용 <b>${m.tx_cost_bps}bp</b><br>
@@ -815,7 +826,7 @@ function render(s){
             실현 회전율 <b>${((p.turnover||0)*100).toFixed(1)}%</b> ·
             누적 비용 <b>${usd(p.costs_paid||0)}</b><br>
           보유 주식: ${Object.entries(p.positions||{}).map(([t,q])=>
-            `<span style="color:${c(t)}">${t}</span> ${q.toLocaleString()}주`).join(' · ')||'없음'}<br>
+            `<span style="color:${c(t)}">${esc(t)}</span> ${q.toLocaleString()}주`).join(' · ')||'없음'}<br>
           BL 사후 이동: ${blRows||'-'}<br>
           <span style="color:var(--dim)">사후 이동이 클수록 견해가 많이 반영된 것이고, 0에 가까우면
           모델이 확신을 못 줘서 시장 균형 쪽으로 되돌아간 것입니다.</span><br><br>
@@ -842,7 +853,7 @@ if(_pmBtn) _pmBtn.onclick=async function(){
   const label=this.textContent;
   this.disabled=true; this.textContent='LLM 호출 중…';
   try{
-    const r=await fetch('/api/pm-opinion',{method:'POST'});
+    const r=await fetch('/api/pm-opinion',{method:'POST', headers:FMA_HEADERS});
     const j=await r.json().catch(()=>({ok:false,message:'응답을 읽을 수 없습니다'}));
     await load();
     if(!j.ok){
@@ -862,9 +873,9 @@ const _runBtn=document.getElementById('runBtn');
 if(_runBtn) _runBtn.onclick=async function(){
   this.disabled=true; this.textContent='실행 중…';
   try{
-    await fetch('/api/run-cycle',{method:'POST'});
+    await fetch('/api/run-cycle',{method:'POST', headers:FMA_HEADERS});
     const t=setInterval(async()=>{
-      const r=await fetch('/api/state',{cache:'no-store'});
+      const r=await fetch('/api/state',{cache:'no-store', headers:FMA_HEADERS});
       if(r.ok){const s=await r.json(); if(!s._running){clearInterval(t);
         document.getElementById('runBtn').disabled=false;
         document.getElementById('runBtn').textContent='사이클 실행'; render(s);}}
@@ -916,11 +927,13 @@ const signPct=v=>v==null?'—':(v>=0?'+':'')+v.toFixed(2)+'%';
 function holdMsg(text,kind){
   const el=document.getElementById('holdMsg');
   if(!el) return;
-  el.innerHTML=text?`<div class="hmsg ${kind||'ok'}">${text}</div>`:'';
+  el.innerHTML=text?`<div class="hmsg ${kind||'ok'}">${esc(text)}</div>`:'';
   if(text&&kind!=='err') setTimeout(()=>{if(el.firstChild)el.innerHTML='';},6000);
 }
 
 async function api(url,opts){
+  opts=Object.assign({}, opts||{});
+  opts.headers=Object.assign({}, FMA_HEADERS, opts.headers||{});
   let r;
   try{
     r=await fetch(url,opts);
@@ -1049,10 +1062,14 @@ function stdev(xs){
 /* holdings.py::HoldingsBook.valuation 과 같은 규칙:
    시세를 못 받은 종목, 환율이 없는 통화는 합산에서 빼고 목록으로 보고한다.
    0 으로 채우면 자산이 조용히 줄어든다. */
+function usableNum(n){
+  return (typeof n==='number' && Number.isFinite(n) && n>0) ? n : null;
+}
 function valuationClient(items,prices,fx){
   const rows=[]; let total=0; const unpriced=[], unconverted=[];
   items.forEach(h=>{
-    const px=prices[h.ticker], rate=fx[h.currency];
+    // holdings.py 와 같다. NaN·0·음수는 '시세 없음'이다. 넣으면 합계가 NaN 이 된다.
+    const px=usableNum(prices[h.ticker]), rate=usableNum(fx[h.currency]);
     const mv=px!=null?px*h.quantity:null;
     const cb=h.avg_cost!=null?h.avg_cost*h.quantity:null;
     const pnl=(mv!=null&&cb!=null)?mv-cb:null;
@@ -1238,8 +1255,8 @@ if(symQ) symQ.addEventListener('input',function(){
       SUG=await Store.search(q);
       if(!SUG.length){ box.innerHTML='<div><span class="ex">결과가 없습니다</span></div>'; }
       else{ box.innerHTML=SUG.map((r,i)=>
-        `<div data-i="${i}"><span><span class="sym">${r.symbol}</span> ${r.name}</span>`+
-        `<span class="ex">${r.exchange||''} · ${r.currency}</span></div>`).join(''); }
+        `<div data-i="${i}"><span><span class="sym">${esc(r.symbol)}</span> ${esc(r.name)}</span>`+
+        `<span class="ex">${esc(r.exchange||'')} · ${esc(r.currency)}</span></div>`).join(''); }
       box.style.display='block';
     }catch(e){ holdMsg('검색 실패: '+e.message,'err'); }
   },250);
@@ -1285,7 +1302,7 @@ if(addLotBtn) addLotBtn.onclick=()=>submitAdd('lot');
 async function loadHoldings(){
   try{ HOLD=await Store.list(); renderHoldings(); }
   catch(e){ const b=document.getElementById('holdBody');
-    if(b) b.innerHTML=`<div class="empty">보유 정보를 불러오지 못했습니다: ${e.message}</div>`; }
+    if(b) b.innerHTML=`<div class="empty">보유 정보를 불러오지 못했습니다: ${esc(e.message)}</div>`; }
 }
 
 function renderActions(brokers){
@@ -1295,8 +1312,8 @@ function renderActions(brokers){
   if(MODE==='server'){
     html+=(brokers||[]).map(b=>{
       const ok=b.configured;
-      return `<button data-broker="${b.name}" ${ok?'':'disabled'} title="${
-        ok?'조회 전용 — 주문은 하지 않습니다':'설정 필요: '+(b.missing||[]).join(', ')}">${b.label} 가져오기</button>`;
+      return `<button data-broker="${esc(b.name)}" ${ok?'':'disabled'} title="${
+        ok?'조회 전용 — 주문은 하지 않습니다':'설정 필요: '+esc((b.missing||[]).join(', '))}">${esc(b.label)} 가져오기</button>`;
     }).join('');
     html+='<button id="csvBtn" title="증권사에서 내려받은 잔고 CSV">CSV 가져오기</button>';
   }
@@ -1418,8 +1435,8 @@ function renderHoldings(){
     const pnlCls=v.pnl_pct==null?'':(v.pnl_pct>=0?'style="color:var(--pos,#3fb0a0)"':'style="color:var(--neg,#e06c6c)"');
     const viewCell=mv?`<span ${mv.view_horizon_pct>=0?'style="color:var(--pos,#3fb0a0)"':'style="color:var(--neg,#e06c6c)"'}>`+
       `${signPct(mv.view_horizon_pct)}</span> <span style="color:var(--dim);font-size:10px">확신 ${mv.confidence}</span>`:'—';
-    html+=`<tr><td><span class="tk">${h.ticker}</span>`+
-      (h.name?`<div class="nm">${h.name}</div>`:'')+
+    html+=`<tr><td><span class="tk">${esc(h.ticker)}</span>`+
+      (h.name?`<div class="nm">${esc(h.name)}</div>`:'')+
       `</td>`+
       `<td data-label="수량">${fmtNum(h.quantity,h.quantity%1?4:0)}</td>`+
       `<td data-label="평단">${money(h.avg_cost,h.currency)}</td>`+
@@ -1428,15 +1445,15 @@ function renderHoldings(){
       `<td data-label="비중">${v.weight==null?'—':(v.weight*100).toFixed(1)+'%'}</td>`+
       `<td data-label="손익" ${pnlCls}>${signPct(v.pnl_pct)}</td>`+
       (showViews?`<td data-label="모델 견해">${viewCell}</td>`:'')+
-      `<td class="delcell"><span class="del" data-del="${h.ticker}" title="삭제">✕</span></td></tr>`;
+      `<td class="delcell"><span class="del" data-del="${esc(h.ticker)}" title="삭제">✕</span></td></tr>`;
   });
   html+='</tbody></table>';
 
   if(val.total_value){
     html+=`<div class="note" style="margin-top:8px">평가액 합계 `+
       `<b>${money(val.total_value,val.base_currency)}</b> (${val.base_currency} 환산)`+
-      (val.unpriced&&val.unpriced.length?` · <span style="color:#d8a13a">시세 없음: ${val.unpriced.join(', ')}</span>`:'')+
-      (val.unconverted&&val.unconverted.length?` · <span style="color:#d8a13a">환율 없음: ${val.unconverted.join(', ')}</span>`:'')+
+      (val.unpriced&&val.unpriced.length?` · <span style="color:#d8a13a">시세 없음: ${esc(val.unpriced.join(', '))}</span>`:'')+
+      (val.unconverted&&val.unconverted.length?` · <span style="color:#d8a13a">환율 없음: ${esc(val.unconverted.join(', '))}</span>`:'')+
       `</div>`;
   }
 
@@ -1457,8 +1474,8 @@ function renderHoldings(){
   html+=renderVerdicts(a);
 
   if(a.notes&&a.notes.length){
-    html+='<div class="hnotes">'+a.notes.map(n=>`<div class="hnote">${n}</div>`).join('')+'</div>';
-    if(a.disclaimer) html+=`<div class="note" style="margin-top:10px">${a.disclaimer}</div>`;
+    html+='<div class="hnotes">'+a.notes.map(n=>`<div class="hnote">${esc(n)}</div>`).join('')+'</div>';
+    if(a.disclaimer) html+=`<div class="note" style="margin-top:10px">${esc(a.disclaimer)}</div>`;
     if(a.as_of) html+=`<div class="note">분석 시각 ${a.as_of.replace('T',' ').slice(0,16)}</div>`;
   }else{
     html+='<div class="note" style="margin-top:10px">'+
@@ -1577,11 +1594,6 @@ function renderScorecard(g){
    렌더는 서버가 준 JSON 을 그대로 그리며, 없는 값은 '—' 로 둔다(0 으로 채우지 않는다). */
 let MACRO=null, macroTimer=null;
 
-const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>(
-  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-/* 코멘트에 쓰인 **강조** 만 태그로 바꾼다. 그 외 입력은 전부 이스케이프된 뒤라 안전하다. */
-const emph=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b style="color:#d7dee8">$1</b>');
-
 const TAGCLASS={'과열':'hot','52주 상단':'warn','52주 하단':'cold','과매도':'cold',
   '약세장':'hot','조정':'warn','변동성 확대':'warn','금리차 역전':'hot'};
 
@@ -1636,7 +1648,7 @@ function renderMacro(){
       </div>`).join('');
     const news=(t.news||[]).map(a=>`
       <div style="margin:5px 0"><span class="msrc">${esc(a.source)}</span>${
-        a.link?`<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>`
+        safeUrl(a.link)?`<a href="${safeUrl(a.link)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>`
              :esc(a.title)}</div>`).join('');
 
     H.push(`

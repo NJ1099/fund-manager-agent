@@ -21,6 +21,10 @@
 
 증권사 연동은 **조회 전용**입니다. 주문 API 는 코드에 존재하지 않습니다.
 
+인증은 없다. 상태 변경 POST 는 `X-Requested-With: fma` 가 있을 때만 받고,
+루프백으로 띄우면 Host 가 127.0.0.1·localhost·::1 이 아니면 거절한다.
+다른 사이트의 페이지가 이 API 를 대신 누르지 못하게 하기 위해서다.
+
 의존성은 표준 라이브러리뿐입니다 (FastAPI 불필요).
 """
 import json
@@ -28,6 +32,7 @@ import logging
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 from core import config, holdings_api, macro_api, storage
 
@@ -42,6 +47,62 @@ log = logging.getLogger("server")
 
 _run_lock = threading.Lock()
 _running = False
+
+# 상태 변경 요청에 대시보드가 붙이는 값. 다른 사이트의 form POST 는 이 헤더를 못 넣는다.
+POST_MARKER = "fma"
+_LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def route_of(path):
+    """쿼리와 끝 슬래시를 뺀 경로. 접두사 일치는 `/api/state` 가 다른 경로까지 연다."""
+    path = (path or "").split("?", 1)[0]
+    if len(path) > 1:
+        path = path.rstrip("/")
+    return path or "/"
+
+
+def request_host(value):
+    if not value:
+        return ""
+    host = value.strip().lower()
+    if host.startswith("["):
+        end = host.find("]")
+        return host[1:end] if end != -1 else ""
+    if host.count(":") == 1:
+        return host.split(":", 1)[0]
+    return host
+
+
+def request_allowed(method, host_header, origin, bind_host, requested_with):
+    """로컬 대시보드 이외의 호출을 거절한다.
+
+    이 서버에는 인증이 없다. 브라우저에 열린 다른 페이지가 form POST 로
+    사이클·유료 논평·보유 갱신을 대신 누를 수 있고, DNS rebinding 이면
+    Host 가 루프백이 아닌 채로 127.0.0.1 에 닿는다. 둘 다 막는다.
+    `SERVER_HOST=0.0.0.0` 으로 일부러 연 경우에는 Host 를 제한하지 않되,
+    Origin 이 있으면 Host 와 같아야 하고 POST 표식은 그대로 요구한다.
+    """
+    host = request_host(host_header)
+    bind = (bind_host or "").strip().lower()
+    loopback = bind in _LOOPBACK or bind == ""
+    if loopback and host not in _LOOPBACK:
+        return False
+
+    if origin is not None and str(origin).strip():
+        origin = str(origin).strip()
+        if origin.lower() == "null":
+            return False
+        oh = (urlparse(origin).hostname or "").lower()
+        if not oh:
+            return False
+        if loopback and oh not in _LOOPBACK:
+            return False
+        if not loopback and oh != host:
+            return False
+
+    if method.upper() == "POST" and (requested_with or "") != POST_MARKER:
+        return False
+    return True
 
 
 def _run_cycle_bg():
@@ -92,6 +153,8 @@ def _refresh_pm_opinion():
     state["pm_opinion"] = text
     state["pm_source"] = f"llm:{config.PM_MODEL}"
     state["llm_calls"] = state.get("llm_calls", 0) + 1
+    if not isinstance(state.get("meta"), dict):
+        state["meta"] = {}
     state["meta"]["pm_source"] = state["pm_source"]
     storage.write_json(config.STATE_FILE, state)
     log.info("PM 논평 갱신 완료 (사이클 %s, 누적 호출 %d회)",
@@ -109,6 +172,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(data)
 
@@ -143,8 +209,24 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "JSON 을 해석하지 못했습니다"})
             return None
 
+    def _guard(self):
+        origin = self.headers.get("Origin")
+        if request_allowed(
+            self.command, self.headers.get("Host"), origin,
+            config.SERVER_HOST, self.headers.get("X-Requested-With"),
+        ):
+            return True
+        self._send(403, "forbidden", "text/plain; charset=utf-8")
+        return False
+
+    def _route(self):
+        return route_of(self.path)
+
     def do_GET(self):
-        if self.path.startswith("/api/state"):
+        if not self._guard():
+            return
+        route = self._route()
+        if route == "/api/state":
             if not config.STATE_FILE.exists():
                 self._send(404, json.dumps({
                     "error": "아직 사이클이 실행되지 않았습니다. `python bot.py once` 를 먼저 실행하세요."
@@ -158,16 +240,16 @@ class Handler(BaseHTTPRequestHandler):
             state["_llm_mode"] = config.PM_LLM_MODE
             self._send(200, json.dumps(state, ensure_ascii=False))
 
-        elif self.path.startswith("/api/holdings"):
+        elif route == "/api/holdings":
             self._json(*holdings_api.list_holdings())
 
-        elif self.path.startswith("/api/symbol-search"):
+        elif route == "/api/symbol-search":
             self._json(*holdings_api.search(self._query().get("q", [""])[0]))
 
-        elif self.path.startswith("/api/brokers"):
+        elif route == "/api/brokers":
             self._json(*holdings_api.brokers_status())
 
-        elif self.path.startswith("/api/scorecard"):
+        elif route == "/api/scorecard":
             # 모델 성적표. 채점은 `scripts/validate.py` 가 미리 해두고 여기서는 읽기만 한다
             # (전 종목 과거 시세를 다시 받아야 해서 요청 안에서 하기엔 무겁다).
             f = config.STATE_DIR / "scorecard.json"
@@ -177,11 +259,11 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(200, storage.read_json(f))
 
-        elif self.path.startswith("/api/macro"):
+        elif route == "/api/macro":
             # 저장된 브리핑을 읽기만 한다. 수집은 POST /api/macro/refresh 에서만.
             self._json(*macro_api.get())
 
-        elif self.path in ("/", "/index.html"):
+        elif route in ("/", "/index.html"):
             page = config.WEB_DIR / "dashboard.html"
             if not page.exists():
                 self._send(500, "dashboard.html 없음", "text/plain; charset=utf-8")
@@ -191,14 +273,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found", "text/plain")
 
     def do_POST(self):
-        if self.path.startswith("/api/run-cycle"):
+        if not self._guard():
+            return
+        route = self._route()
+        if route == "/api/run-cycle":
             started = _run_cycle_bg()
             self._send(202 if started else 409, json.dumps(
                 {"started": started,
                  "message": "사이클 시작" if started else "이미 실행 중입니다"},
                 ensure_ascii=False))
 
-        elif self.path.startswith("/api/pm-opinion"):
+        elif route == "/api/pm-opinion":
             # 유료 LLM 호출 — 사용자가 버튼을 눌렀을 때만 여기로 온다
             if _running:
                 self._send(409, json.dumps(
@@ -210,18 +295,18 @@ class Handler(BaseHTTPRequestHandler):
                 {"ok": ok, "message": message,
                  "llm_calls": (state or {}).get("llm_calls")}, ensure_ascii=False))
 
-        elif self.path.startswith("/api/macro/refresh"):
+        elif route == "/api/macro/refresh":
             # 외부 시세·RSS 를 새로 받는다. LLM 을 부르지 않으므로 비용은 0원이다.
             self._json(*macro_api.refresh())
 
-        elif self.path.startswith("/api/holdings/analyze"):
+        elif route == "/api/holdings/analyze":
             self._json(*holdings_api.start_analysis())
 
-        elif self.path.startswith("/api/holdings/sync"):
+        elif route == "/api/holdings/sync":
             broker = self._query().get("broker", [""])[0]
             self._json(*holdings_api.sync(broker))
 
-        elif self.path.startswith("/api/holdings/import"):
+        elif route == "/api/holdings/import":
             # CSV 는 텍스트가 아니라 바이트로 받는다 (국내 증권사 파일은 대부분 cp949)
             raw = self._body_bytes()
             if raw is None:
@@ -229,13 +314,13 @@ class Handler(BaseHTTPRequestHandler):
             replace = self._query().get("replace", ["0"])[0] in ("1", "true", "yes")
             self._json(*holdings_api.import_csv(raw, replace=replace))
 
-        elif self.path.startswith("/api/holdings/delete"):
+        elif route == "/api/holdings/delete":
             payload = self._body_json()
             if payload is None:
                 return
             self._json(*holdings_api.remove(payload.get("ticker", "")))
 
-        elif self.path.startswith("/api/holdings"):
+        elif route == "/api/holdings":
             payload = self._body_json()
             if payload is None:
                 return
@@ -251,9 +336,7 @@ def main(port=None, host=None):
     host = host or config.SERVER_HOST
     port = port or config.SERVER_PORT
     srv = ThreadingHTTPServer((host, port), Handler)
-    log.info("대시보드: http://%s:%d  (모드=%s)",
-             "localhost" if host in ("127.0.0.1", "0.0.0.0") else host,
-             port, config.EXECUTION_MODE)
+    log.info("대시보드: http://%s:%d  (모드=%s)", host, port, config.EXECUTION_MODE)
     if host == "0.0.0.0":
         log.warning("모든 인터페이스에 바인딩됨 — 사이클 실행 API가 무인증으로 노출됩니다")
     try:

@@ -25,6 +25,8 @@ ANALYSIS_FILE = config.STATE_DIR / "holdings_analysis.json"
 
 _analysis_lock = threading.Lock()
 _analyzing = False
+# 장부 파일은 읽기-수정-쓰기라, 요청이 겹치면 나중 저장이 앞 저장을 덮어쓴다.
+_book_lock = threading.Lock()
 
 
 def _book():
@@ -78,32 +80,34 @@ def add(payload):
     except (TypeError, ValueError):
         return 400, {"error": "평균단가를 숫자로 입력하세요"}
 
-    book = _book()
-    try:
-        if payload.get("mode") == "lot":
-            if avg_cost is None:
-                return 400, {"error": "추가매수에는 매수단가가 필요합니다"}
-            book.add_lot(ticker, quantity=quantity, price=avg_cost,
-                         name=payload.get("name") or None,
-                         currency=(payload.get("currency") or "").upper() or None)
-        else:
-            book.upsert(ticker=ticker, quantity=quantity, avg_cost=avg_cost,
-                        name=payload.get("name") or None,
-                        currency=(payload.get("currency") or "").upper() or None,
-                        note=payload.get("note") or None, source="manual")
-    except ValueError as e:
-        return 400, {"error": str(e)}
+    with _book_lock:
+        book = _book()
+        try:
+            if payload.get("mode") == "lot":
+                if avg_cost is None:
+                    return 400, {"error": "추가매수에는 매수단가가 필요합니다"}
+                book.add_lot(ticker, quantity=quantity, price=avg_cost,
+                             name=payload.get("name") or None,
+                             currency=(payload.get("currency") or "").upper() or None)
+            else:
+                book.upsert(ticker=ticker, quantity=quantity, avg_cost=avg_cost,
+                            name=payload.get("name") or None,
+                            currency=(payload.get("currency") or "").upper() or None,
+                            note=payload.get("note") or None, source="manual")
+        except ValueError as e:
+            return 400, {"error": str(e)}
 
-    book.save()
-    return _ok(book, message=f"{ticker} 을(를) 저장했습니다")
+        book.save()
+        return _ok(book, message=f"{ticker} 을(를) 저장했습니다")
 
 
 def remove(ticker):
-    book = _book()
-    if book.remove(ticker) is None:
-        return 404, {"error": f"{ticker} 은(는) 장부에 없습니다"}
-    book.save()
-    return _ok(book, message=f"{ticker} 을(를) 삭제했습니다")
+    with _book_lock:
+        book = _book()
+        if book.remove(ticker) is None:
+            return 404, {"error": f"{ticker} 은(는) 장부에 없습니다"}
+        book.save()
+        return _ok(book, message=f"{ticker} 을(를) 삭제했습니다")
 
 
 # ------------------------------------------------------------------ 가져오기
@@ -127,9 +131,14 @@ def sync(name):
         log.exception("증권사 동기화 실패")
         return 502, {"error": f"{name} 동기화 실패: {type(e).__name__}"}
 
-    book = _book()
-    info = book.replace_source(name, items)
-    book.save()
+    with _book_lock:
+        book = _book()
+        try:
+            info = book.replace_source(name, items)
+        except ValueError as e:
+            # 반영 전에 실패해야 한다. 빈 목록으로 성공하면 장부가 지워진다.
+            return 502, {"error": str(e)}
+        book.save()
     return _ok(book, message=(
         f"{adapter.label}에서 {info['synced']}종목을 가져왔습니다"
         + (f" (사라진 종목 {len(info['removed'])}개 정리)" if info["removed"] else "")
@@ -150,13 +159,17 @@ def import_csv(raw, replace=False):
         return 400, {"error": "가져올 보유 종목이 없습니다 (수량이 0보다 큰 줄이 없습니다)",
                      "detail": info}
 
-    book = _book()
-    if replace:
-        book.replace_source("csv", items)
-    else:
-        for it in items:
-            book.upsert(source="csv", **{k: v for k, v in it.items() if k != "source"})
-    book.save()
+    with _book_lock:
+        book = _book()
+        try:
+            if replace:
+                book.replace_source("csv", items)
+            else:
+                for it in items:
+                    book.upsert(source="csv", **{k: v for k, v in it.items() if k != "source"})
+        except ValueError as e:
+            return 400, {"error": str(e)}
+        book.save()
     return _ok(book, message=f"CSV 에서 {len(items)}종목을 가져왔습니다", detail=info)
 
 
@@ -171,9 +184,10 @@ def analysis_status():
 def start_analysis(with_views=True):
     """백그라운드로 분석을 돌린다. 추론이 종목 수만큼 걸리므로 요청을 붙잡지 않는다."""
     global _analyzing
-    book = _book()
-    if not len(book):
-        return 400, {"error": "보유 종목이 없습니다. 먼저 종목을 추가하세요"}
+    with _book_lock:
+        book = _book()
+        if not len(book):
+            return 400, {"error": "보유 종목이 없습니다. 먼저 종목을 추가하세요"}
 
     with _analysis_lock:
         if _analyzing:

@@ -31,8 +31,8 @@ log = logging.getLogger("holdings.csv")
 # 컬럼 이름 후보 (소문자·공백제거 후 비교)
 _C_TICKER = ("종목코드", "종목번호", "단축코드", "표준코드", "코드", "티커", "심볼",
              "symbol", "ticker", "code", "stockcode", "isin")
-_C_NAME = ("종목명", "상품명", "종목", "회사명", "name", "stockname", "productname",
-           "description")
+_C_NAME = ("종목한글명", "한글종목명", "종목명", "상품명", "회사명", "종목이름",
+           "종목", "name", "stockname", "productname", "description")
 _C_QTY = ("보유수량", "잔고수량", "수량", "주식수", "보유주식수", "체결수량",
           "quantity", "qty", "shares", "balance", "position")
 _C_AVG = ("매입평균가격", "매입단가", "평균단가", "평단가", "매입가", "평균매입가",
@@ -48,17 +48,38 @@ def _norm_key(s):
     return re.sub(r"[\s_\-()]", "", str(s or "")).lower()
 
 
-def _find_column(header, candidates):
-    """헤더에서 후보와 맞는 컬럼명을 찾는다. 완전일치 → 부분일치 순."""
-    norm = {_norm_key(h): h for h in header if h}
+def _find_column(header, candidates, used=None, reject=()):
+    """헤더에서 후보와 맞는 컬럼명을 찾는다. 완전일치 → 더 긴 부분일치 순.
+
+    `used` 에 있는 컬럼은 다시 고르지 않는다. 안 그러면 '종목' 이 '종목코드' 를
+    종목명으로 집어 가, 옆에 있는 '종목한글명' 이 무시된다.
+    부분일치는 후보가 길수록 우선한다. '코드' 가 '통화코드' 에 먼저 붙는 일은
+    `reject` 로 막는다.
+    """
+    used = set(used or ())
+    norm = {}
+    for h in header:
+        if not h or h in used:
+            continue
+        norm.setdefault(_norm_key(h), h)
+
     for c in candidates:
-        if c in norm:
+        if c in norm and not any(r in c for r in reject):
             return norm[c]
+
+    best, best_score = None, None
     for c in candidates:
+        if len(c) < 2:
+            continue
         for k, original in norm.items():
-            if c in k:
-                return original
-    return None
+            if c not in k:
+                continue
+            if any(r in k for r in reject):
+                continue
+            score = (len(c), -abs(len(k) - len(c)))
+            if best_score is None or score > best_score:
+                best, best_score = original, score
+    return best
 
 
 def parse_number(value):
@@ -113,8 +134,15 @@ def parse(text_or_bytes, resolve_market=True):
     if not header:
         raise ValueError("헤더 줄을 찾지 못했습니다")
 
-    col_ticker = _find_column(header, _C_TICKER)
-    col_qty = _find_column(header, _C_QTY)
+    used = []
+    # '코드' 가 통화코드·계좌번호에 붙으면 종목코드 없이 통화를 티커로 읽는다.
+    col_ticker = _find_column(
+        header, _C_TICKER, reject=("통화", "currency", "계좌", "account"))
+    if col_ticker:
+        used.append(col_ticker)
+    col_qty = _find_column(header, _C_QTY, used)
+    if col_qty:
+        used.append(col_qty)
     if not col_ticker or not col_qty:
         missing = []
         if not col_ticker:
@@ -126,10 +154,16 @@ def parse(text_or_bytes, resolve_market=True):
             f"파일에 있던 컬럼: {', '.join(str(h) for h in header if h)}"
         )
 
-    col_name = _find_column(header, _C_NAME)
-    col_avg = _find_column(header, _C_AVG)
-    col_ccy = _find_column(header, _C_CCY)
-    col_acc = _find_column(header, _C_ACC)
+    col_name = _find_column(header, _C_NAME, used)
+    if col_name:
+        used.append(col_name)
+    col_avg = _find_column(header, _C_AVG, used)
+    if col_avg:
+        used.append(col_avg)
+    col_ccy = _find_column(header, _C_CCY, used)
+    if col_ccy:
+        used.append(col_ccy)
+    col_acc = _find_column(header, _C_ACC, used)
 
     items, skipped = [], []
     for lineno, row in enumerate(reader, start=2):

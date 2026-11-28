@@ -38,7 +38,7 @@ FEEDS = [
     # (이름, URL, 언어, 기본 주제 힌트)
     ("CNBC 경제",     "https://www.cnbc.com/id/20910258/device/rss/rss.html", "en", None),
     ("CNBC 시장",     "https://www.cnbc.com/id/10000664/device/rss/rss.html", "en", None),
-    ("MarketWatch",   "http://feeds.marketwatch.com/marketwatch/topstories/", "en", None),
+    ("MarketWatch",   "https://feeds.marketwatch.com/marketwatch/topstories/", "en", None),
     ("Yahoo Finance", "https://finance.yahoo.com/news/rssindex",              "en", None),
     ("Investing 원자재", "https://www.investing.com/rss/news_11.rss",         "en", "commodities"),
     ("Investing 외환",  "https://www.investing.com/rss/news_1.rss",           "en", "fx"),
@@ -187,10 +187,23 @@ def classify(title, summary="", hint=None):
     return []
 
 
+def _safe_link(link):
+    """http(s) 만 남긴다. javascript: 같은 값은 화면의 링크가 된다."""
+    link = (link or "").strip()
+    lowered = link.lower()
+    if lowered.startswith("https://") or lowered.startswith("http://"):
+        return link
+    return ""
+
+
 def fetch_feed(name, url, lang="en", hint=None, limit=20):
     """RSS 하나를 읽어 항목 목록으로. 실패하면 예외를 올린다(상위에서 기록)."""
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    data = urllib.request.urlopen(req, timeout=TIMEOUT).read()
+    # 상한을 넘기면 잘라 파싱하지 않는다. 잘린 XML 은 조용히 다른 기사가 된다.
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        data = resp.read(1_500_001)
+    if len(data) > 1_500_000:
+        raise ValueError("응답이 너무 큽니다")
     root = ET.fromstring(data)
 
     items = root.findall(".//item")
@@ -222,7 +235,7 @@ def fetch_feed(name, url, lang="en", hint=None, limit=20):
         out.append({
             "title": title,
             "summary": summary,
-            "link": link.strip(),
+            "link": _safe_link(link),
             "source": name,
             "lang": lang,
             "published": pub.isoformat() if pub else None,

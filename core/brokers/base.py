@@ -51,6 +51,26 @@ class BrokerAdapter:
         raise NotImplementedError
 
     # ---------------------------------------------------------------- 공통 HTTP
+    def _sensitive_values(self):
+        """오류 문구에서 지울 값. 짧은 값은 본문 글자와 겹치므로 건드리지 않는다."""
+        found = []
+        for key, _label in getattr(self, "required_config", ()):
+            val = getattr(config, key, "") or ""
+            if isinstance(val, str) and len(val) >= 8:
+                found.append(val)
+        token = getattr(self, "_token", None)
+        if isinstance(token, str) and len(token) >= 8:
+            found.append(token)
+        found.sort(key=len, reverse=True)
+        return found
+
+    def _redact(self, text):
+        if not text:
+            return text
+        for secret in self._sensitive_values():
+            text = text.replace(secret, "****")
+        return text
+
     def _request(self, url, method="GET", headers=None, body=None, form=None):
         """JSON 응답을 돌려준다. 오류 메시지에 자격증명을 넣지 않는다."""
         data = None
@@ -70,9 +90,12 @@ class BrokerAdapter:
         except urllib.error.HTTPError as e:
             detail = ""
             try:
-                detail = e.read().decode("utf-8")[:300]
+                detail = e.read().decode("utf-8", errors="replace")[:300]
             except Exception:
                 pass
+            # 증권사 오류 본문이 요청에 실었던 비밀을 그대로 돌려주는 경우가 있다.
+            # 이 문자열은 대시보드와 로그에 그대로 찍힌다.
+            detail = self._redact(detail).strip()
             raise BrokerError(
                 f"{self.label} 요청 실패 (HTTP {e.code})"
                 + (f": {detail}" if detail else "")

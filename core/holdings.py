@@ -24,6 +24,7 @@
 합산에서 빼고 `unconverted` 로 보고한다 — 0으로 채우면 자산이 조용히 줄어든다.
 """
 import logging
+import math
 from datetime import datetime, timezone
 
 from . import config, storage
@@ -42,23 +43,42 @@ def normalize_ticker(ticker):
     return str(ticker or "").strip().upper()
 
 
+def _finite(value):
+    """숫자로 해석되고 유한한 값만 돌려준다. 아니면 None."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return value
+
+
 def make_holding(ticker, quantity, avg_cost=None, currency=None, account=None,
                  source="manual", note=None, name=None):
     """보유 한 줄. 수량이 0 이하면 보유가 아니다."""
     ticker = normalize_ticker(ticker)
     if not ticker:
         raise ValueError("종목 코드가 비어 있습니다")
-    qty = float(quantity)
-    if qty <= 0:
-        raise ValueError(f"{ticker}: 수량은 0보다 커야 합니다 (받은 값 {quantity})")
+    qty = _finite(quantity)
+    # NaN 은 `qty <= 0` 이 False 라서 그냥 두면 평가액 합계가 통째로 NaN 이 된다.
+    if qty is None or qty <= 0:
+        raise ValueError(f"{ticker}: 수량은 0보다 큰 숫자여야 합니다 (받은 값 {quantity})")
     if source not in VALID_SOURCES:
         raise ValueError(f"알 수 없는 출처 '{source}' (가능: {', '.join(VALID_SOURCES)})")
+
+    if avg_cost in (None, ""):
+        avg = None
+    else:
+        avg = _finite(avg_cost)
+        if avg is None or avg < 0:
+            raise ValueError(f"{ticker}: 평균단가는 0 이상의 숫자여야 합니다 (받은 값 {avg_cost})")
 
     return {
         "ticker": ticker,
         "name": name,
         "quantity": qty,
-        "avg_cost": float(avg_cost) if avg_cost not in (None, "") else None,
+        "avg_cost": avg,
         "currency": (currency or infer_currency(ticker)).upper(),
         "account": account,
         "source": source,
@@ -126,9 +146,11 @@ class HoldingsBook:
         사용자가 직접 평단을 계산해야 한다.
         """
         ticker = normalize_ticker(ticker)
-        qty, px = float(quantity), float(price)
-        if qty <= 0:
-            raise ValueError("추가 수량은 0보다 커야 합니다")
+        qty, px = _finite(quantity), _finite(price)
+        if qty is None or qty <= 0:
+            raise ValueError("추가 수량은 0보다 큰 숫자여야 합니다")
+        if px is None or px <= 0:
+            raise ValueError("매수단가는 0보다 큰 숫자여야 합니다")
 
         old = self.items.get(ticker)
         if old is None or old.get("avg_cost") in (None, ""):
@@ -153,14 +175,23 @@ class HoldingsBook:
         장부에서도 사라져야 한다. 그런데 **다른 출처(수동 입력·다른 증권사)의
         줄까지 지우면 안 된다** — 그래서 출처별로만 교체한다.
         """
-        kept = {tk: h for tk, h in self.items.items() if h.get("source") != source}
         incoming = {}
+        # 검증이 끝나기 전에는 self.items 를 건드리지 않는다. 중간에 예외가 나면
+        # 기존 장부가 그대로 남아야 한다 (일부만 갈아끼우면 수량이 반쪽이 된다).
         for h in items:
-            hh = dict(h)
-            hh["source"] = source
-            hh["updated_at"] = _now()
-            incoming[normalize_ticker(hh["ticker"])] = hh
+            hh = make_holding(
+                ticker=h.get("ticker"),
+                quantity=h.get("quantity"),
+                avg_cost=h.get("avg_cost"),
+                currency=h.get("currency"),
+                account=h.get("account"),
+                source=source,
+                note=h.get("note"),
+                name=h.get("name"),
+            )
+            incoming[hh["ticker"]] = hh
 
+        kept = {tk: h for tk, h in self.items.items() if h.get("source") != source}
         removed = [tk for tk in self.items
                    if self.items[tk].get("source") == source and tk not in incoming]
         self.items = {**kept, **incoming}
@@ -190,8 +221,12 @@ class HoldingsBook:
         rows, total, unconverted, unpriced = [], 0.0, [], []
         for tk in self.tickers:
             h = self.items[tk]
-            px = prices.get(tk)
-            rate = fx.get(h["currency"])
+            px = _finite(prices.get(tk))
+            if px is not None and px <= 0:
+                px = None
+            rate = _finite(fx.get(h["currency"]))
+            if rate is not None and rate <= 0:
+                rate = None
 
             row = dict(h)
             row["price"] = px

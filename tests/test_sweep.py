@@ -21,6 +21,13 @@ def test_안전장치_설정은_바꿀_수_없다(key):
         sweep.parse_assignment(f"{key}=paper")
 
 
+def test_apply도_안전장치를_우회하지_못한다():
+    """parse 를 건너뛴 dict 로 EXECUTION_MODE 를 바꾸면 모의투자 잠금이 풀린다."""
+    with pytest.raises(ValueError, match="바꿀 수 없습니다"):
+        sweep.apply({"EXECUTION_MODE": "live"})
+    assert config.EXECUTION_MODE == "paper"
+
+
 def test_모르는_설정은_조용히_무시되지_않고_실패한다():
     with pytest.raises(ValueError, match="조정 가능한 설정이 아닙니다"):
         sweep.parse_assignment("TOPK=3")          # 오타

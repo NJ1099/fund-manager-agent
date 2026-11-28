@@ -104,6 +104,10 @@ export default async function handler(req, res) {
     res.status(400).json({ error: '검색어가 비어 있습니다' });
     return;
   }
+  if (q.length > 80) {
+    res.status(400).json({ error: '검색어가 너무 깁니다' });
+    return;
+  }
 
   const order = hasHangul(q) ? [searchNaver, searchYahoo] : [searchYahoo, searchNaver];
   const results = [];
